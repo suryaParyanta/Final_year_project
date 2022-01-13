@@ -264,12 +264,12 @@ def calculate_loss(score, label, criterion, other_loss = {}, reg = {}):
     if len(other_loss) > 0:
         for k in other_loss.keys():
             if k == 'prototype_loss':
-                loss += other_loss[k] * reg['lambda1']
+                loss += other_loss[k].mean() * reg['lambda1']
             elif k == 'vc_loss':
                 print(other_loss[k])
-                loss += other_loss[k] * reg['lambda2']
+                loss += other_loss[k].mean() * reg['lambda2']
             else:
-                loss += other_loss[k]
+                loss += other_loss[k].mean()
     
     return loss
 
