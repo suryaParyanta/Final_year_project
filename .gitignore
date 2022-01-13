@@ -1,0 +1,7 @@
+dataset
+results/
+tf_code/
+notebooks/.ipynb_checkpoints/
+
+__pycache__/
+*/__pycache__/
