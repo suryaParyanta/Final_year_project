@@ -242,13 +242,11 @@ def train_face_recognition(model, classifier, model_eval, args, train_loader, de
         # save the model
         try:
             model_state_dict = model.module.state_dict()
-            cls_state_dict = classifier.module.state_dict()
         except:
             model_state_dict = model.state_dict()
-            cls_state_dict = classifier.state_dict()
 
         torch.save(model_state_dict, os.path.join(save_dir, f'epoch_{epoch}.pt'))
-        torch.save(cls_state_dict, os.path.join(save_dir, f'mcp_epoch_{epoch}.pt'))
+        torch.save(classifier.state_dict(), os.path.join(save_dir, f'mcp_epoch_{epoch}.pt'))
 
         # LFW evaluation
         model_eval.load_state_dict(torch.load(os.path.join(save_dir, f'epoch_{epoch}.pt')))
@@ -382,7 +380,6 @@ if __name__ == '__main__':
         model = nn.DataParallel(model)
 
         classifier = MarginCosineProduct(in_features = 512, out_features = num_classes)
-        classifier = nn.DataParallel(classifier)
 
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
