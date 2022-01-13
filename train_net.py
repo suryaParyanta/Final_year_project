@@ -194,7 +194,7 @@ def train(model, args, train_loader, val_loader = None, device = 'cpu', save_dir
         lr_scheduler.step()
 
 
-def train_face_recognition(model, classifier, args, train_loader, device = 'cpu', save_dir = 'results/vgg16_prototype', log_interval = 1000):
+def train_face_recognition(model, classifier, model_eval, args, train_loader, device = 'cpu', save_dir = 'results/vgg16_prototype', log_interval = 1000):
     criterion = nn.CrossEntropyLoss()
 
     num_epoch = args.num_epoch
@@ -240,11 +240,20 @@ def train_face_recognition(model, classifier, args, train_loader, device = 'cpu'
                 loss_display = 0.0 
 
         # save the model
-        torch.save(model.state_dict(), os.path.join(save_dir, f'epoch_{epoch}.pt'))
-        torch.save(classifier.state_dict(), os.path.join(save_dir, f'mcp_epoch_{epoch}.pt'))
+        try:
+            model_state_dict = model.module.state_dict()
+            cls_state_dict = classifier.module.state_dict()
+        except:
+            model_state_dict = model.state_dict()
+            cls_state_dict = classifier.state_dict()
+
+        torch.save(model_state_dict, os.path.join(save_dir, f'epoch_{epoch}.pt'))
+        torch.save(cls_state_dict, os.path.join(save_dir, f'mcp_epoch_{epoch}.pt'))
 
         # LFW evaluation
-        accuracy, th, acc_std = lfw_eval(model, args.test_root, args.test_images, args.test_filelist, device = device)
+        model_eval.load_state_dict(torch.load(os.path.join(save_dir, f'epoch_{epoch}.pt')))
+    
+        accuracy, th, acc_std = lfw_eval(model_eval, args.test_root, args.test_images, args.test_filelist, device = device)
         print(f"Epoch {epoch}: lfw_accuracy = {accuracy} %,  std = {acc_std},  threshold = {th}")
 
         lr_scheduler.step()
@@ -358,8 +367,10 @@ if __name__ == '__main__':
 
         if args.model_type == "vgg_16_attn":
             model = initialize_vgg_attn(num_clusters, args.feature_dict)
+            model_eval = initialize_vgg_attn(num_clusters, args.feature_dict)
         elif args.model_type == "resnet_attn":
             model = initialize_LResNet50_attn(num_clusters, args.feature_dict)
+            model_eval = initialize_LResNet50_attn(num_clusters, args.feature_dict)
 
         if os.path.exists(args.pretrained_weight):
             print("Load pre-trained weight from:", args.pretrained_weight)
@@ -367,8 +378,11 @@ if __name__ == '__main__':
         
         for param in model.parameters():
             param.requires_grad = True
+        
+        model = nn.DataParallel(model)
 
         classifier = MarginCosineProduct(in_features = 512, out_features = num_classes)
+        classifier = nn.DataParallel(classifier)
 
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
@@ -382,9 +396,10 @@ if __name__ == '__main__':
         train_face_recognition(
             model,
             classifier,
+            model_eval,
             args,
             CASIA_loader,
             device = args.device,
             save_dir = save_dir,
-            log_interval = 2000
+            log_interval = 1000
         )
