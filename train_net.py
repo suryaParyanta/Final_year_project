@@ -266,7 +266,6 @@ def calculate_loss(score, label, criterion, other_loss = {}, reg = {}):
             if k == 'prototype_loss':
                 loss += other_loss[k].mean() * reg['lambda1']
             elif k == 'vc_loss':
-                print(other_loss[k])
                 loss += other_loss[k].mean() * reg['lambda2']
             else:
                 loss += other_loss[k].mean()
