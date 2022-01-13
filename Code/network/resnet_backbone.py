@@ -232,7 +232,7 @@ class LResNet_Attention(LResNet):
                 similarity_norm = F.conv2d(layer3_norm, norm_feature_dict)
 
             cluster_assign = torch.max(similarity_norm, dim = 1).indices
-            sim_clusters.append(cluster_assign.detach().to('cpu').clone())
+            sim_clusters.append(cluster_assign.detach().clone())
 
             rshape_feat_dict = norm_feature_dict.reshape(num_clusters, num_channel)
             D = rshape_feat_dict[cluster_assign].permute(0,3,1,2)
@@ -263,7 +263,7 @@ class LResNet_Attention(LResNet):
                 attn = attn / torch.max(attn, dim=[2, 3], keepdim = True).values
             
             # store the attention map for visualization
-            attn_maps.append(attn.detach().to('cpu').clone()) # 28 * 28
+            attn_maps.append(attn.detach().clone()) # 28 * 28
 
             # (N, C, 112, 112) -> (N, C, 14, 8, 14, 8)
             init_stage_result = init_stage_result.reshape(-1, 64, attn_size, 8, attn_size, 8)
@@ -293,7 +293,7 @@ class LResNet_Attention(LResNet):
 
         # feature dictionary loss
         cluster_assign = torch.max(similarity_norm, dim = 1).indices
-        sim_clusters.append(cluster_assign.detach().to('cpu').clone())
+        sim_clusters.append(cluster_assign.detach().clone())
         rshape_feat_dict = norm_feature_dict.reshape(num_clusters, num_channel)
         D = rshape_feat_dict[cluster_assign].permute(0,3,1,2)
         vc_loss += torch.mean(0.5 * (D - layer3_norm)**2)
@@ -320,7 +320,7 @@ class LResNet_Attention(LResNet):
             attn_new = attn_new / torch.max(attn_new, dim=[2, 3], keepdim = True).values
 
         # store attention map for visualization
-        attn_maps.append(attn_new.detach().to('cpu').clone())
+        attn_maps.append(attn_new.detach().clone())
 
         # forward propagation to layer 4
         layer4_result = self.layer4(layer3_result)
