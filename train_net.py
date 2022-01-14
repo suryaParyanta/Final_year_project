@@ -368,11 +368,15 @@ if __name__ == '__main__':
             model_eval = initialize_vgg_attn(num_clusters, args.feature_dict)
         elif args.model_type == "resnet_attn":
             model = initialize_LResNet50_attn(num_clusters, args.feature_dict)
+
             model_eval = initialize_LResNet50_attn(num_clusters, args.feature_dict)
 
         if os.path.exists(args.pretrained_weight):
             print("Load pre-trained weight from:", args.pretrained_weight)
             model.load_state_dict(torch.load(args.pretrained_weight), strict = False)
+        
+        # clean cluster noises in feature dictionary
+        model._clean_feature_dict()
         
         for param in model.parameters():
             param.requires_grad = True
@@ -398,5 +402,5 @@ if __name__ == '__main__':
             CASIA_loader,
             device = args.device,
             save_dir = save_dir,
-            log_interval = 1000
+            log_interval = 2000
         )

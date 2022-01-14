@@ -185,6 +185,37 @@ class LResNet_Attention(LResNet):
         print("Feature dictionary shape:", feature_dict.shape)
         
         return nn.Parameter(torch.tensor(feature_dict, dtype=torch.float32))
+    
+    def _clean_feature_dict(self):
+        noise = [11, 17, 27, 54, 57, 62]
+        self.feature_dict.data[noise] = torch.zeros(*self.feature_dict.data[noise].shape)
+
+    def load_feature_dict(self, feat_dict_file):
+        """
+        Manually load feature dictionary.
+
+        :returns: Feature dictionary weight as learnable parameter
+        :rtype:   torch.nn.Parameter
+        """
+        print("\nLoad feature dictionary from:", feat_dict_file)
+        with open(feat_dict_file, 'rb') as file:
+            feature_dict = pickle.load(file)
+
+        assert self.num_clusters % feature_dict.shape[0] == 0, f"Cannot fit feature dictionary with {feature_dict.shape[0]} clusters into {self.num_clusters} clusters!"
+
+        if feature_dict.shape[0] != self.num_clusters:
+            num_repeat = self.num_clusters // feature_dict.shape[0]
+            feature_dict = np.repeat(feature_dict, num_repeat, axis=0)
+
+        if feature_dict.shape[1] != 256:
+            num_repeat = 256 // feature_dict.shape[1]
+            feature_dict = np.repeat(feature_dict, num_repeat, axis=1)
+
+        feature_dict = np.expand_dims(feature_dict, axis = [-1, -2]) # no need to transpose!
+        print("Feature dictionary shape:", feature_dict.shape)
+        
+        self.feature_dict = nn.Parameter(torch.tensor(feature_dict, dtype=torch.float32))
+        self.feature_dict.requires_grad = True
 
     def forward(self, x):
         """
@@ -246,7 +277,7 @@ class LResNet_Attention(LResNet):
             if self.use_threshold:
                 attn_flat = attn.reshape(-1, attn_size * attn_size)
                 percentage_l = 0.8
-                percentage_u = 0.2
+                percentage_u = 0.1
                 percentage_ln = int(attn_size * attn_size * percentage_l)
                 percentage_un = int(attn_size * attn_size * percentage_u)
 
@@ -303,7 +334,7 @@ class LResNet_Attention(LResNet):
         if self.use_threshold:
             attn_flat = attn_new.reshape(-1, attn_size * attn_size)
             percentage_l = 0.8
-            percentage_u = 0.2
+            percentage_u = 0.1
             percentage_ln = int(attn_size * attn_size * percentage_l)
             percentage_un = int(attn_size * attn_size * percentage_u)
 
@@ -355,6 +386,7 @@ def initialize_LResNet50_IR(is_gray:bool = False):
     """
     filter_list = [64, 64, 128, 256, 512]
     layers = [3, 4, 14, 3]
+    
     return LResNet(IR_Block, layers, filter_list, is_gray)
 
 
