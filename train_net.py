@@ -220,6 +220,11 @@ def train_face_recognition(model, classifier, model_eval, args, train_loader, de
         model.train()
         classifier.train()
 
+        # unfreeze model parameters for epoch 6 onwards
+        if epoch == 6:
+            for param in model.parameters():
+                param.requires_grad = True
+
         for idx, (data, label) in enumerate(train_loader, 1):
             curr_iter = (epoch - 1) * len(train_loader) + idx
             optimizer.zero_grad()
@@ -368,18 +373,18 @@ if __name__ == '__main__':
             model_eval = initialize_vgg_attn(num_clusters, args.feature_dict)
         elif args.model_type == "resnet_attn":
             model = initialize_LResNet50_attn(num_clusters, args.feature_dict)
-
             model_eval = initialize_LResNet50_attn(num_clusters, args.feature_dict)
 
         if os.path.exists(args.pretrained_weight):
             print("Load pre-trained weight from:", args.pretrained_weight)
             model.load_state_dict(torch.load(args.pretrained_weight), strict = False)
-        
-        # clean cluster noises in feature dictionary
-        model._clean_feature_dict()
-        
-        for param in model.parameters():
-            param.requires_grad = True
+
+            # freeze the model parameters (for fist 5 epoch)
+            for param in model.parameters():
+                param.requires_grad = False
+        else:
+            # freeze feature dictionary for first 5 epoch
+            model.feature_dict.requires_grad = False
         
         model = nn.DataParallel(model)
 
