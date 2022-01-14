@@ -26,14 +26,14 @@ def parse_argument():
         '--model_type',
         help = 'Model used for evaluation',
         choices = ['vgg16', 'vgg16_prototype', 'vgg16_attn', 'resnet', 'resnet_attn'],
-        default = 'resnet',
+        default = 'resnet_attn',
         type = str
     )
 
     parser.add_argument(
         '--model_weight',
         help = 'Pretrained model weight',
-        default = 'results/resnet50_casia/epoch_25.pth',
+        default = 'results/resnet_64_second_attn_casia_4/epoch_2.pt',
         type = str
     )
 
@@ -320,17 +320,20 @@ if __name__ == '__main__':
     elif args.dataset == 'lfw':
         num_classes = 10575
 
-        args.test_root = '../dataset/LFW_pairs_aligned'
+        args.test_root = 'dataset/LFW_pairs_aligned'
         args.test_images = 'Combined'
         args.test_filelist = 'pairs_masked.txt'
 
         if args.model_type == "vgg_16_attn":
             model = initialize_vgg_attn(64, args.feature_dict)
+            model.load_state_dict(torch.load(args.model_weight))
         elif args.model_type == "resnet_attn":
             model = initialize_LResNet50_attn(64, args.feature_dict)
+            model.load_state_dict(torch.load(args.model_weight))
+            model._clean_feature_dict()
         elif args.model_type == "resnet":
             model = initialize_LResNet50_IR()
-        model.load_state_dict(torch.load(args.model_weight))
+            model.load_state_dict(torch.load(args.model_weight))        
 
         acc, threshold, acc_std = lfw_eval(
             model, 

@@ -187,7 +187,7 @@ class LResNet_Attention(LResNet):
         return nn.Parameter(torch.tensor(feature_dict, dtype=torch.float32))
     
     def _clean_feature_dict(self):
-        noise = [11, 17, 27, 54, 57, 62]
+        noise = [17, 27, 54, 57, 62]
         self.feature_dict.data[noise] = torch.zeros(*self.feature_dict.data[noise].shape)
 
     def load_feature_dict(self, feat_dict_file):
@@ -277,7 +277,7 @@ class LResNet_Attention(LResNet):
             if self.use_threshold:
                 attn_flat = attn.reshape(-1, attn_size * attn_size)
                 percentage_l = 0.8
-                percentage_u = 0.1
+                percentage_u = 0.2
                 percentage_ln = int(attn_size * attn_size * percentage_l)
                 percentage_un = int(attn_size * attn_size * percentage_u)
 
@@ -334,7 +334,7 @@ class LResNet_Attention(LResNet):
         if self.use_threshold:
             attn_flat = attn_new.reshape(-1, attn_size * attn_size)
             percentage_l = 0.8
-            percentage_u = 0.1
+            percentage_u = 0.2
             percentage_ln = int(attn_size * attn_size * percentage_l)
             percentage_un = int(attn_size * attn_size * percentage_u)
 
