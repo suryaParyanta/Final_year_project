@@ -63,7 +63,7 @@ class MarginCosineProduct(nn.Module):
         """
         cosine = cosine_sim(x, self.weight)
         one_hot = torch.zeros_like(cosine)
-        one_hot.scatter(1, label.view(-1,1), 1.0)
+        one_hot.scatter(1, label.reshape(-1,1), 1.0)
 
         output = self.s * (cosine - one_hot * self.m)
 

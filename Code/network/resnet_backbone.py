@@ -139,6 +139,7 @@ class LResNet_Attention(LResNet):
                  feature_dict_file:str, 
                  layers: list = [3, 4, 14, 3], filter_list: list = [64, 64, 128, 256, 512],
                  recurrent_step:int = 1,
+                 percent_u:float = 0.2, percent_l:float = 0.8,
                  normalize_feature_map:bool = False, use_threshold:bool = True, normalize_before_attention:bool = True,
                  is_gray: bool = False):
         """
@@ -151,6 +152,9 @@ class LResNet_Attention(LResNet):
         self.feature_dict_file = feature_dict_file
 
         self.recurrent_step = recurrent_step
+
+        self.percent_u = percent_u
+        self.percent_l = percent_l
 
         self.normalize_feature_map = normalize_feature_map
         self.use_threshold = use_threshold
@@ -278,10 +282,8 @@ class LResNet_Attention(LResNet):
 
             if self.use_threshold:
                 attn_flat = attn.reshape(-1, attn_size * attn_size)
-                percentage_l = 0.8
-                percentage_u = 0.2
-                percentage_ln = int(attn_size * attn_size * percentage_l)
-                percentage_un = int(attn_size * attn_size * percentage_u)
+                percentage_ln = int(attn_size * attn_size * self.percent_l)
+                percentage_un = int(attn_size * attn_size * self.percent_u)
 
                 threshold_l = torch.topk(attn_flat, percentage_ln, dim=1).values[:, -1] #.values get the values (not index) -> size (N, percentage_l)
                 threshold_u = torch.topk(attn_flat, percentage_un, dim=1).values[:, -1]
@@ -336,10 +338,8 @@ class LResNet_Attention(LResNet):
         attn_new = torch.max(similarity, dim=1, keepdim=True).values # attention should be (28, 28)
         if self.use_threshold:
             attn_flat = attn_new.reshape(-1, attn_size * attn_size)
-            percentage_l = 0.8
-            percentage_u = 0.2
-            percentage_ln = int(attn_size * attn_size * percentage_l)
-            percentage_un = int(attn_size * attn_size * percentage_u)
+            percentage_ln = int(attn_size * attn_size * self.percent_l)
+            percentage_un = int(attn_size * attn_size * self.percent_u)
 
             threshold_l = torch.topk(attn_flat, percentage_ln, dim=1).values[:, -1] #.values get the values (not index) -> size (N, percentage_l)
             threshold_u = torch.topk(attn_flat, percentage_un, dim=1).values[:, -1]
@@ -393,7 +393,7 @@ def initialize_LResNet50_IR(is_gray:bool = False):
     return LResNet(IR_Block, layers, filter_list, is_gray)
 
 
-def initialize_LResNet50_attn(num_clusters:int, feature_dict_file:str, recurrent_step:int = 1):
+def initialize_LResNet50_attn(num_clusters:int, feature_dict_file:str, recurrent_step:int = 1, percent_u:float = 0.2, percent_l:float = 0.8):
     """
     Function to get original LResNet50-IR + Attention model. Some hyperparameters are choosen in advance.
 
@@ -408,7 +408,9 @@ def initialize_LResNet50_attn(num_clusters:int, feature_dict_file:str, recurrent
         IR_Block,
         num_clusters,
         feature_dict_file,
-        recurrent_step = recurrent_step 
+        recurrent_step = recurrent_step,
+        percent_u = percent_u,
+        percent_l = percent_l
     )
 
 

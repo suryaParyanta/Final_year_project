@@ -214,6 +214,7 @@ class VGG_Attention_Prototype(VGG_16):
                  prototype_file:str, feature_dict_file:str,
                  layers:list = [2,2,3,3,3], filter_list:list = [64,128,256,512,512], 
                  recurrent_step:int = 1,
+                 percent_u:float = 0.2, percent_l:float = 0.8,
                  normalize_feature_map:bool = False, use_threshold:bool = True, normalize_before_attention:bool = True, 
                  distance:str = 'euclidean',
                  is_gray:bool = False):
@@ -243,7 +244,11 @@ class VGG_Attention_Prototype(VGG_16):
         self.num_classes = num_classes
         self.num_prototype = num_prototype
         self.num_clusters = num_clusters
+
         self.recurrent_step = recurrent_step
+
+        self.percent_u = percent_u
+        self.percent_l = percent_l
 
         self.normalize_feature_map = normalize_feature_map
         self.use_threshold = use_threshold
@@ -361,10 +366,8 @@ class VGG_Attention_Prototype(VGG_16):
             # clipping the attention map
             if self.use_threshold:
                 attn_flat = attn.reshape(-1, 14 * 14)
-                percentage_l = 0.8
-                percentage_u = 0.2
-                percentage_ln = int(14 * 14 * percentage_l)
-                percentage_un = int(14 * 14 * percentage_u)
+                percentage_ln = int(14 * 14 * self.percent_l)
+                percentage_un = int(14 * 14 * self.percent_u)
 
                 threshold_l = torch.topk(attn_flat, percentage_ln, dim=1).values[:, -1] #.values get the values (not index) -> size (N, percentage_l)
                 threshold_u = torch.topk(attn_flat, percentage_un, dim=1).values[:, -1]
@@ -412,10 +415,8 @@ class VGG_Attention_Prototype(VGG_16):
         attn_new = torch.max(similarity, dim=1, keepdim=True).values
         if self.use_threshold:
             attn_flat = attn_new.reshape(-1, 14 * 14)
-            percentage_l = 0.8
-            percentage_u = 0.2
-            percentage_ln = int(14 * 14 * percentage_l)
-            percentage_un = int(14 * 14 * percentage_u)
+            percentage_ln = int(14 * 14 * self.percent_l)
+            percentage_un = int(14 * 14 * self.percent_u)
 
             threshold_l = torch.topk(attn_flat, percentage_ln, dim=1).values[:, -1] #.values get the values (not index) -> size (N, percentage_l)
             threshold_u = torch.topk(attn_flat, percentage_un, dim=1).values[:, -1]
@@ -502,6 +503,7 @@ class VGG_Attention(VGG_16):
                  feature_dict_file:str,
                  layers:list = [2,2,3,3,3], filter_list:list = [64,128,256,512,512], 
                  recurrent_step:int = 1,
+                 percent_u:float = 0.2, percent_l:float = 0.8,
                  normalize_feature_map:bool = False, use_threshold:bool = True, normalize_before_attention:bool = True,
                  is_gray:bool = False):
         """
@@ -525,6 +527,9 @@ class VGG_Attention(VGG_16):
         self.feature_dict_file = feature_dict_file
         
         self.recurrent_step = recurrent_step
+
+        self.percent_u = percent_u
+        self.percent_l = percent_l
 
         self.normalize_feature_map = normalize_feature_map
         self.use_threshold = use_threshold
@@ -657,10 +662,8 @@ class VGG_Attention(VGG_16):
 
             if self.use_threshold:
                 attn_flat = attn.reshape(-1, 14 * 14)
-                percentage_l = 0.8
-                percentage_u = 0.2
-                percentage_ln = int(14 * 14 * percentage_l)
-                percentage_un = int(14 * 14 * percentage_u)
+                percentage_ln = int(14 * 14 * self.percent_l)
+                percentage_un = int(14 * 14 * self.percent_u)
 
                 threshold_l = torch.topk(attn_flat, percentage_ln, dim=1).values[:, -1] #.values get the values (not index) -> size (N, percentage_l)
                 threshold_u = torch.topk(attn_flat, percentage_un, dim=1).values[:, -1]
@@ -714,10 +717,8 @@ class VGG_Attention(VGG_16):
         attn_new = torch.max(similarity, dim=1, keepdim=True).values
         if self.use_threshold:
             attn_flat = attn_new.reshape(-1, 14 * 14)
-            percentage_l = 0.8
-            percentage_u = 0.2 # 0.1 is better?
-            percentage_ln = int(14 * 14 * percentage_l)
-            percentage_un = int(14 * 14 * percentage_u)
+            percentage_ln = int(14 * 14 * self.percent_l)
+            percentage_un = int(14 * 14 * self.percent_u)
 
             threshold_l = torch.topk(attn_flat, percentage_ln, dim=1).values[:, -1] #.values get the values (not index) -> size (N, percentage_l)
             threshold_u = torch.topk(attn_flat, percentage_un, dim=1).values[:, -1]
@@ -771,7 +772,7 @@ def initialize_vgg(num_classes:int = 10):
     return VGG_16(Conv_Block, layers, filter_list, num_classes)
 
 
-def initialize_vgg_attn_prototype(num_classes:int, num_prototype:int, num_clusters:int, prototype_file:str, feature_dict_file:str, recurrent_step:int = 1):
+def initialize_vgg_attn_prototype(num_classes:int, num_prototype:int, num_clusters:int, prototype_file:str, feature_dict_file:str, recurrent_step:int = 1, percent_u:float = 0.2, percent_l:float = 0.8):
     """
     Function to get original TDMPNet/TDAPNet. Some hyperparameters are choosen in advance.
 
@@ -789,11 +790,13 @@ def initialize_vgg_attn_prototype(num_classes:int, num_prototype:int, num_cluste
         Conv_Block,
         num_classes, num_prototype, num_clusters,
         prototype_file, feature_dict_file,
-        recurrent_step = recurrent_step
+        recurrent_step = recurrent_step,
+        percent_u = percent_u,
+        percent_l = percent_l
     )
 
 
-def initialize_vgg_attn(num_clusters:int, feature_dict_file:str, recurrent_step:int = 1):
+def initialize_vgg_attn(num_clusters:int, feature_dict_file:str, recurrent_step:int = 1, percent_u:float = 0.2, percent_l:float = 0.8):
     """
     Function to get original VGG + Attention model. Some hyperparameters are choosen in advance.
 
@@ -808,7 +811,9 @@ def initialize_vgg_attn(num_clusters:int, feature_dict_file:str, recurrent_step:
         Conv_Block,
         num_clusters,
         feature_dict_file,
-        recurrent_step = recurrent_step
+        recurrent_step = recurrent_step,
+        percent_u = percent_u,
+        percent_l = percent_l
     )
 
 
