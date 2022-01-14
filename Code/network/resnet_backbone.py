@@ -188,7 +188,7 @@ class LResNet_Attention(LResNet):
     
     def _clean_feature_dict(self):
         noise = [17, 27, 54, 57, 62]
-        self.feature_dict.data[noise] = torch.zeros(*self.feature_dict.data[noise].shape)
+        self.feature_dict.data[noise] = torch.zeros(*self.feature_dict.data[noise].shape, device=self.feature_dict.device)
 
     def load_feature_dict(self, feat_dict_file):
         """
@@ -251,6 +251,7 @@ class LResNet_Attention(LResNet):
 
         # recurrence step
         for i in range(self.recurrent_step):
+            self._clean_feature_dict() # clean noise before normalization
             norm_feature_dict = F.normalize(self.feature_dict, p=2, dim=1)
             layer3_norm = F.normalize(layer3_result, p=2, dim=1)
 
@@ -262,6 +263,7 @@ class LResNet_Attention(LResNet):
                 similarity = F.conv2d(layer3_result, norm_feature_dict)
                 similarity_norm = F.conv2d(layer3_norm, norm_feature_dict)
 
+            # clean noise clusters
             cluster_assign = torch.max(similarity_norm, dim = 1).indices
             sim_clusters.append(cluster_assign.detach().clone())
 
@@ -311,6 +313,7 @@ class LResNet_Attention(LResNet):
 
         new_layer3 = layer3_result
 
+        self._clean_feature_dict() # clean the noise before normalization
         norm_feature_dict = F.normalize(self.feature_dict, p=2, dim=1)
         layer3_norm = F.normalize(new_layer3, p=2, dim=1)
 
