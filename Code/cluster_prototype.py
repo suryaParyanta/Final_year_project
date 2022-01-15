@@ -1,3 +1,7 @@
+import os
+import sys
+sys.path.append(os.getcwd())
+
 import pickle
 import argparse
 import numpy as np
@@ -6,7 +10,7 @@ from sklearn.cluster import KMeans
 import torch
 from torchvision import transforms
 
-from dataset_helpers import get_dataset, get_data_loader, DatasetSampler
+from Code.dataset_helpers import get_dataset, get_data_loader, DatasetSampler
 from Code.network.vgg_backbone import initialize_vgg, Identity
 
 
@@ -16,14 +20,29 @@ def parse_argument():
     parser.add_argument(
         '--root',
         help = 'Dataset root path',
-        default = '../dataset/MNIST_224X224_3',
+        default = 'dataset/MNIST_224X224_3',
         type = str
     )
 
     parser.add_argument(
+        '--num_classes',
+        help = 'Number of classes in the dataset',
+        default = 10,
+        type = str
+    )
+
+    parser.add_argument(
+        '--num_prototype',
+        help = 'Number of prototype per class',
+        default = 4,
+        type = int
+    )
+
+
+    parser.add_argument(
         '--save_path',
-        help = 'Dataset root path',
-        default = 'prototype_weight/prototype_vgg16.pkl',
+        help = "Save path (.pkl file)",
+        default = '',
         type = str
     )
 
@@ -50,7 +69,7 @@ def get_initial_prototype(model, train_dataset, num_classes:int, num_prototype:i
     :param save_path:     Save directory
     :param device:        Device used for computation
 
-    :results: Prototype weight stored on the pickle file
+    :returns: Prototype weight stored on the pickle file
     """
     batch_size = 128
     proto_weight = np.ndarray((num_classes, num_prototype, 512, 7, 7)).astype(np.float32) #(num_cls, num_proto, C, H, W)
@@ -74,8 +93,8 @@ def get_initial_prototype(model, train_dataset, num_classes:int, num_prototype:i
             # forward propagation
             with torch.no_grad():
                 data = data.to(device)
-                feature_map = model(data)
-                feature_map = feature_map.to('cpu').detach().numpy()
+                feature_map, *_ = model(data)
+                feature_map = feature_map["score"].to('cpu').detach().numpy()
             
             pool5_features[idx_start:idx_end, :] = feature_map
 
@@ -88,25 +107,22 @@ def get_initial_prototype(model, train_dataset, num_classes:int, num_prototype:i
         centers = np.reshape(centers, (num_prototype, 512, 7, 7))
         proto_weight[i, :, :, :, :] = centers
 
+    if os.path.exists(save_path):
+        idx = 2
+        while os.path.exists(save_path.split(".")[0] + f"_{idx}" + ".pkl"):
+            idx += 1
+        save_path = save_path.split(".")[0] + f"_{idx}" + ".pkl"
+    
+    print(f"Saving prototype weight into: {save_path}")
     with open(save_path, 'wb') as prototype_file:
         pickle.dump(proto_weight, prototype_file)
 
 
-def load_proto_weight(load_path):
-    """
-    Prototype weight pickle loader.
-
-    :param load_path: Path to load the prototype weight
-    """
-    print("\nLoad prototype weight from: ", load_path)
-    with open(load_path, 'rb') as prototype_file:
-        proto_weight = pickle.load(prototype_file)
-
-    print("Prototype weight shape:", proto_weight.shape)
-
-
 if __name__ == '__main__':
     args = parse_argument()
+
+    if args.save_path == "":
+        args.save_path = os.path.join("prototype_weight", f"prototype_{args.num_classes}_{args.num_prototype}_MNIST.pkl")
 
     train_annot = 'pairs_train.txt'
     train_data = 'train'
@@ -121,12 +137,18 @@ if __name__ == '__main__':
 
     # load model
     model = initialize_vgg()
-    model.load_state_dict(torch.load('results/vgg16_no_augmentation/vgg_16_epoch_30.pt'))
+    model.load_state_dict(torch.load("pretrained_weight/VGG_MNIST.pt"))
     for param in model.parameters():
         param.requires_grad = False
 
     # do not need fully-connected layer
     model.fc = Identity()
 
-    # load_proto_weight('prototype_weight/original_vgg16.pkl')
-    get_initial_prototype(model, MNIST_train, num_classes = 10, save_path = args.save_path ,device = args.device)
+    get_initial_prototype(
+        model, 
+        MNIST_train, 
+        num_classes = args.num_classes, 
+        num_prototype = args.num_prototype,
+        save_path = args.save_path,
+        device = args.device
+    )

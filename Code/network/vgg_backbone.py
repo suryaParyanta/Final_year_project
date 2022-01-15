@@ -1,4 +1,9 @@
+import os
+
 import pickle
+import logging
+logger = logging.getLogger(__name__)
+print = logger.info
 
 import numpy as np
 
@@ -6,6 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
+from torchvision import transforms
 from torchsummary import summary
 
 
@@ -21,13 +27,8 @@ class Conv_Block(nn.Module):
         Convolution block initialization.
 
         :param in_channel:  Input channel of convolution layer
-        :type in_channel:   int
-
         :param out_channel: Output channel of convolution layer
-        :type out_channel:  int
-
-        :param stride: Stride of convolution
-        :type stride:  int
+        :param stride:      Stride of convolution
         """
         super(Conv_Block, self).__init__()
 
@@ -213,7 +214,7 @@ class VGG_Attention_Prototype(VGG_16):
                  num_classes:int, num_prototype:int, num_clusters:int,
                  prototype_file:str, feature_dict_file:str,
                  layers:list = [2,2,3,3,3], filter_list:list = [64,128,256,512,512], 
-                 recurrent_step:int = 1,
+                 prototype_method:str = "kmeans", recurrent_step:int = 1,
                  percent_u:float = 0.2, percent_l:float = 0.8,
                  normalize_feature_map:bool = False, use_threshold:bool = True, normalize_before_attention:bool = True, 
                  distance:str = 'euclidean',
@@ -245,6 +246,7 @@ class VGG_Attention_Prototype(VGG_16):
         self.num_prototype = num_prototype
         self.num_clusters = num_clusters
 
+        self.prototype_method = prototype_method
         self.recurrent_step = recurrent_step
 
         self.percent_u = percent_u
@@ -274,14 +276,14 @@ class VGG_Attention_Prototype(VGG_16):
         :returns: Feature dictionary weight as learnable parameter
         :rtype:   torch.nn.Parameter
         """
-        print("\nLoad feature dictionary from:", self.feature_dict_file)
+        print(f"Load feature dictionary from: {self.feature_dict_file}")
         with open(self.feature_dict_file, 'rb') as file:
             feature_dict = pickle.load(file)
 
         assert feature_dict.shape[0] == self.num_clusters, f"Cannot fit feature dictionary with {feature_dict.shape[0]} clusters into {self.num_clusters} clusters!"
 
         feature_dict = np.expand_dims(feature_dict, axis = [-1, -2]) # no need to transpose!
-        print("Feature dictionary shape:", feature_dict.shape)
+        print(f"Feature dictionary shape: {feature_dict.shape}")
 
         return nn.Parameter(torch.tensor(feature_dict, dtype=torch.float32))
 
@@ -292,17 +294,120 @@ class VGG_Attention_Prototype(VGG_16):
         :returns: Prototype weight as learnable parameter
         :rtype:   torch.nn.Parameter
         """
-        print("\nLoad Prototype weight from: ", self.prototype_file)
-        with open(self.prototype_file, 'rb') as file:
-            proto_weight = pickle.load(file)
+        if not os.path.exists(self.prototype_file):
+            assert self.prototype_method in ["kmeans", "random"], "Unsupported prototype methods"
 
-        assert proto_weight.shape[0] == self.num_classes * self.num_prototype, f"Prototype weight dim 0 does not equal to {self.num_classes * self.num_prototype}!"
+            if self.prototype_method == "random":
+                print(f"Prototype weight not found! Use random initialization instead...")
+                proto_weight = nn.Parameter(torch.zeros(self.num_classes * self.num_prototype, 512, 7, 7, dtype = torch.float32))
+                init.xavier_uniform_(proto_weight)
 
+                return proto_weight
+            
+            print("")
+            print(f"Training prototype with kmeans...")
+            proto_weight = self._initialize_prototype()
+
+        elif os.path.exists(self.prototype_file):
+            print(f"Load Prototype weight from: {self.prototype_file}")
+
+            with open(self.prototype_file, 'rb') as file:
+                proto_weight = pickle.load(file)
+                
         *_, C, H, W = proto_weight.shape
         proto_weight = proto_weight.reshape(-1, C, H, W)
-        print("Prototype weight shape:", proto_weight.shape)
+        assert proto_weight.shape[0] == self.num_classes * self.num_prototype, f"Prototype weight dim 0 does not equal to {self.num_classes * self.num_prototype}!"
+        
+        print(f"Prototype weight shape: {proto_weight.shape}")
 
         return nn.Parameter(torch.tensor(proto_weight, dtype=torch.float32))
+    
+    def _initialize_prototype(self):
+        """
+        Generate initial prototype weight. The process involves:
+        1. Forward propagation to obtain feature map
+        2. For each class, perform K-means clustering based on the feature map from step-1
+
+        :returns: Prototype weight stored on the pickle file
+        """
+        import sys
+        import gc
+        sys.path.append(os.getcwd())
+        from sklearn.cluster import KMeans
+        from Code.dataset_helpers import get_dataset, get_data_loader, DatasetSampler
+
+        batch_size = 128;
+        proto_weight = np.ndarray((self.num_classes, self.num_prototype, 512, 7, 7)).astype(np.float32)
+
+        # load pretrained MNIST VGG
+        vgg_pretrain_path = "pretrained_weight/VGG_MNIST.pt"
+        assert os.path.exists(vgg_pretrain_path), f"{vgg_pretrain_path} not exists"
+
+        pretrain_vgg = initialize_vgg(self.num_classes)
+        print(f"Load pretrain VGG from: {vgg_pretrain_path}")
+        pretrain_vgg.load_state_dict(torch.load(vgg_pretrain_path))
+
+        # freeze the layers and remove fully connected layer
+        for p in pretrain_vgg.parameters():
+            p.requires_grad = False
+        pretrain_vgg.fc = Identity()
+
+        # load dataset
+        train_root = "dataset/MNIST_224X224_3"
+        train_annot = "pairs_train.txt"
+        train_data = "train"
+        transform = transforms.Compose([transforms.ToTensor()])
+        train_dataset, _ = get_dataset(train_root, train_data, train_annot, transform)
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        pretrain_vgg.to(device)
+        pretrain_vgg.eval()
+
+        for i in range(self.num_classes):
+            mask = [1 if label == i else 0 for _, label in train_dataset]
+            num_images = sum(mask)
+            pool5_features = np.ndarray((num_images, 512*7*7)).astype(np.float32)
+
+            # prepare the DataLoader
+            mask = torch.tensor(mask)   
+            sampler = DatasetSampler(mask, train_dataset)
+            train_loader = get_data_loader(train_dataset, batch_size = batch_size, shuffle = False, sampler = sampler)
+
+            for batch_idx, (data, label) in enumerate(train_loader):
+                idx_start = batch_idx * batch_size
+                idx_end = min([(batch_idx+1) * batch_size, num_images])
+                
+                # forward propagation
+                with torch.no_grad():
+                    data = data.to(device)
+                    feature_map, *_ = pretrain_vgg(data)
+                    feature_map = feature_map["score"].to('cpu').detach().numpy()
+                
+                pool5_features[idx_start:idx_end, :] = feature_map
+
+            kmeans = KMeans(n_clusters = self.num_prototype)
+            kmeans.fit(pool5_features)
+            centers = kmeans.cluster_centers_
+
+            centers = np.reshape(centers, (self.num_prototype, 512, 7, 7))
+            proto_weight[i, :, :, :, :] = centers
+
+        save_path = os.path.join("prototype_weight", f"prototype_{self.num_classes}_{self.num_prototype}_MNIST.pkl")
+        if os.path.exists(save_path):
+            idx = 2
+            while os.path.exists(save_path.split(".")[0] + f"_{idx}" + ".pkl"):
+                idx += 1
+            save_path = save_path.split(".")[0] + f"_{idx}" + ".pkl"
+
+        print(f"Saving prototype weight into: {save_path}")
+        with open(save_path, 'wb') as prototype_file:
+            pickle.dump(proto_weight, prototype_file)
+
+        # delete unnecessary variable
+        del train_loader, train_dataset
+        gc.collect();
+
+        return proto_weight
 
     def forward(self, x):
         """
@@ -555,7 +660,7 @@ class VGG_Attention(VGG_16):
         :returns: Feature dictionary weight as learnable parameter
         :rtype:   torch.nn.Parameter
         """
-        print("\nLoad feature dictionary from:", self.feature_dict_file)
+        print(f"Load feature dictionary from: {self.feature_dict_file}")
         with open(self.feature_dict_file, 'rb') as file:
             feature_dict = pickle.load(file)
 
@@ -570,7 +675,7 @@ class VGG_Attention(VGG_16):
             feature_dict = np.repeat(feature_dict, num_repeat, axis=1)
 
         feature_dict = np.expand_dims(feature_dict, axis = [-1, -2]) # no need to transpose!
-        print("Feature dictionary shape:", feature_dict.shape)
+        print(f"Feature dictionary shape: {feature_dict.shape}")
         
         return nn.Parameter(torch.tensor(feature_dict, dtype=torch.float32))
 
@@ -580,7 +685,7 @@ class VGG_Attention(VGG_16):
 
         :param feature_dict_file: Path to the pre-trained feature dictionary. 
         """
-        print("\nLoad feature dictionary manually from:", feat_dict_file)
+        print(f"Load feature dictionary manually from: {feat_dict_file}")
         with open(feat_dict_file, 'rb') as file:
             feature_dict = pickle.load(file)
 
@@ -595,7 +700,7 @@ class VGG_Attention(VGG_16):
             feature_dict = np.repeat(feature_dict, num_repeat, axis=1)
 
         feature_dict = np.expand_dims(feature_dict, axis = [-1, -2]) # no need to transpose!
-        print("Feature dictionary shape:", feature_dict.shape)
+        print(f"Feature dictionary shape: {feature_dict.shape}")
 
         self.feature_dict = nn.Parameter(torch.tensor(feature_dict, dtype=torch.float32))
         self.feature_dict.requires_grad = True
@@ -772,7 +877,11 @@ def initialize_vgg(num_classes:int = 10):
     return VGG_16(Conv_Block, layers, filter_list, num_classes)
 
 
-def initialize_vgg_attn_prototype(num_classes:int, num_prototype:int, num_clusters:int, prototype_file:str, feature_dict_file:str, recurrent_step:int = 1, percent_u:float = 0.2, percent_l:float = 0.8):
+def initialize_vgg_attn_prototype(
+    num_classes:int, num_prototype:int, num_clusters:int, 
+    prototype_file:str, feature_dict_file:str, 
+    prototype_method:str = "kmeans", recurrent_step:int = 1, 
+    percent_u:float = 0.2, percent_l:float = 0.8):
     """
     Function to get original TDMPNet/TDAPNet. Some hyperparameters are choosen in advance.
 
@@ -790,6 +899,7 @@ def initialize_vgg_attn_prototype(num_classes:int, num_prototype:int, num_cluste
         Conv_Block,
         num_classes, num_prototype, num_clusters,
         prototype_file, feature_dict_file,
+        prototype_method = prototype_method,
         recurrent_step = recurrent_step,
         percent_u = percent_u,
         percent_l = percent_l
