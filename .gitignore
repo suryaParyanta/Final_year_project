@@ -1,6 +1,7 @@
 dataset
 results/
 tf_code/
+pretrained_weight/
 notebooks/.ipynb_checkpoints/
 
 __pycache__/
