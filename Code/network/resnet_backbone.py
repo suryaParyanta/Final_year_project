@@ -1,5 +1,8 @@
 import os
 import pickle
+import logging
+logger = logging.getLogger(__name__)
+print = logger.info
 
 import numpy as np
 
@@ -171,7 +174,7 @@ class LResNet_Attention(LResNet):
         :returns: Feature dictionary weight as learnable parameter
         :rtype:   torch.nn.Parameter
         """
-        print("\nLoad feature dictionary from:", self.feature_dict_file)
+        print(f"Load feature dictionary from: {self.feature_dict_file}")
         with open(self.feature_dict_file, 'rb') as file:
             feature_dict = pickle.load(file)
 
@@ -186,7 +189,7 @@ class LResNet_Attention(LResNet):
             feature_dict = np.repeat(feature_dict, num_repeat, axis=1)
 
         feature_dict = np.expand_dims(feature_dict, axis = [-1, -2]) # no need to transpose!
-        print("Feature dictionary shape:", feature_dict.shape)
+        print(f"Feature dictionary shape: {feature_dict.shape}")
         
         return nn.Parameter(torch.tensor(feature_dict, dtype=torch.float32))
     
@@ -201,7 +204,7 @@ class LResNet_Attention(LResNet):
         :returns: Feature dictionary weight as learnable parameter
         :rtype:   torch.nn.Parameter
         """
-        print("\nLoad feature dictionary from:", feat_dict_file)
+        print(f"Load feature dictionary from: {feat_dict_file}")
         with open(feat_dict_file, 'rb') as file:
             feature_dict = pickle.load(file)
 
@@ -216,7 +219,7 @@ class LResNet_Attention(LResNet):
             feature_dict = np.repeat(feature_dict, num_repeat, axis=1)
 
         feature_dict = np.expand_dims(feature_dict, axis = [-1, -2]) # no need to transpose!
-        print("Feature dictionary shape:", feature_dict.shape)
+        print(f"Feature dictionary shape: {feature_dict.shape}")
         
         self.feature_dict = nn.Parameter(torch.tensor(feature_dict, dtype=torch.float32))
         self.feature_dict.requires_grad = True
