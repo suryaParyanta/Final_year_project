@@ -132,7 +132,10 @@ def get_model_from_cfg(cfg):
             cfg["MODEL"]["ATTN"]["PERCENT_U"],
             cfg["MODEL"]["ATTN"]["PERCENT_L"]
         )
+        # freeze feature dictionary for first 10 epochs
+        freeze_epoch = 10
         model.feature_dict.requires_grad = False
+
         classifier = MarginCosineProduct(
             cfg["MODEL"]["OUT_FEATURES"],
             cfg["MODEL"]["NUM_CLASSES"]
@@ -150,6 +153,9 @@ def get_model_from_cfg(cfg):
             cfg["MODEL"]["ATTN"]["PERCENT_U"],
             cfg["MODEL"]["ATTN"]["PERCENT_L"]
         )
+        # freeze feature dictionary for several epochs
+        freeze_epoch = 10
+        model.feature_dict.requires_grad = False
         classifier = None
     
     elif cfg["MODEL"]["NAME"] == "resnet":
@@ -167,7 +173,10 @@ def get_model_from_cfg(cfg):
             cfg["MODEL"]["ATTN"]["PERCENT_U"],
             cfg["MODEL"]["ATTN"]["PERCENT_L"]
         )
+        # freeze feature dictionary for several epochs
+        freeze_epoch = 10
         model.feature_dict.requires_grad = False
+
         classifier = MarginCosineProduct(
             cfg["MODEL"]["OUT_FEATURES"],
             cfg["MODEL"]["NUM_CLASSES"]
@@ -179,14 +188,13 @@ def get_model_from_cfg(cfg):
             print(f"Load pretrained backbone from: {cfg['MODEL'][k]['WEIGHTS']}")
             model.load_state_dict(torch.load(cfg["MODEL"][k]["WEIGHTS"]), strict = False)
 
+            freeze_epoch = 10
             # freeze the model (finetune the classifier/prototype first)
             for name, param in model.named_parameters():
                 if "resnet" in cfg["MODEL"]["NAME"]:
-                    freeze_epoch = 7
                     if "layer4" not in name and "fc" not in name:
                         param.requires_grad = False
                 else:
-                    freeze_epoch = 10
                     if "layer5" not in name and "prototype_weight" not in name and "gamma" not in name:
                         param.requires_grad = False
 
@@ -194,7 +202,6 @@ def get_model_from_cfg(cfg):
     if os.path.exists(cfg["MODEL"]["WEIGHTS"]):
         print(f"Load pretrained weight from: {cfg['MODEL']['WEIGHTS']}")
         model.load_state_dict(torch.load(cfg["MODEL"]["WEIGHTS"]))
-    # print("")
     
     return model, classifier, freeze_epoch
 

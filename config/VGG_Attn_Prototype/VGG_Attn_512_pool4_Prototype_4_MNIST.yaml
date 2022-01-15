@@ -2,7 +2,7 @@ BASE: ../Base-VGG_Attn_Prototype.yaml
 MODEL:
   WEIGHTS: ""
   VGG:
-    WEIGHTS: pretrained_weight/VGG_MNIST.pt
+    WEIGHTS: pretrained_weight/VGG_MNIST/epoch_10.pt
   ATTN:
     NUM_CLUSTERS: 512
     WEIGHTS: feature_dictionary/MNIST/dictionary_vgg_pool4_512_ori.pickle
@@ -20,9 +20,9 @@ MODEL:
 DATASETS:
   TRAIN: mnist_train
   VAL: mnist_test
-  TEST: ""
+  TEST: mnist_test_occ
 SOLVER:
-  NUM_EPOCHS: 10
+  NUM_EPOCHS: 20
   BATCH_SIZE: 32
   BASE_LR: 0.001
   MOMENTUM: 0.9
