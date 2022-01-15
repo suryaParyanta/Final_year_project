@@ -1,18 +1,19 @@
-BASE: "../Base-VGG_Attn.yaml"
+BASE: ../Base-VGG_Attn.yaml
 MODEL:
   VGG:
     WEIGHTS: ""
   ATTN:
-    WEIGHTS: "feature_dictionary/CASIA/100000/dictionary_second_64.pickle"
+    NUM_CLUSTERS: 64
+    WEIGHTS: feature_dictionary/CASIA/100000/dictionary_second_64.pickle
     PERCENT_U: 0.1
     PERCENT_L: 0.8
 DATASETS:
-  TRAIN: "casia"
-  VAL: "lfw"
-  TEST: ""
+  TRAIN: casia
+  VAL: lfw
+  TEST: lfw_masked
 SOLVER:
   BASE_LR: 0.001
-  BATCH_SIZE: 16
+  BATCH_SIZE: 32
   MOMENTUM: 0.9
   NUM_EPOCHS: 30
   P_LAMBDA: 1.0
@@ -20,4 +21,4 @@ SOLVER:
   STEP_SIZE: 5
   VC_LAMBDA: 1.0
   WEIGHT_DECAY: 0.0005
-SAVE: "results"
+SAVE: results

@@ -1,0 +1,23 @@
+BASE: ../Base-LResNet50IR_Attn.yaml
+MODEL:
+  RESNETS:
+    WEIGHTS: pretrained_weight/LResNet50IR_CASIA/epoch_25.pth
+  ATTN:
+    NUM_CLUSTERS: 64
+    WEIGHTS: feature_dictionary/CASIA/100000/dictionary_second_64.pickle
+    PERCENT_U: 0.1
+    PERCENT_L: 0.8
+DATASETS:
+  TRAIN: casia
+  VAL: lfw
+  TEST: lfw_masked
+SOLVER:
+  BASE_LR: 0.0005
+  BATCH_SIZE: 16
+  MOMENTUM: 0.9
+  NUM_EPOCHS: 30
+  STEP_FACTOR: 0.5
+  STEP_SIZE: 5
+  VC_LAMBDA: 1.0
+  WEIGHT_DECAY: 0.0005
+SAVE: results

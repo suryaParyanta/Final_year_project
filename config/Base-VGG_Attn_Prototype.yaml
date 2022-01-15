@@ -1,5 +1,5 @@
 MODEL:
-  NAME: vgg_attn
+  NAME: vgg_attn_proto
   VGG:
     LAYERS: [2, 2, 3, 3, 3]
     FILTER: [64, 128, 256, 512, 512]
@@ -7,16 +7,18 @@ MODEL:
     NUM_CLUSTERS: 64
     PERCENT_U: 0.2
     PERCENT_L: 0.8
-  OUT_FEATURES: 512
-  NUM_CLASSES: 10575
+  PROTOTYPE:
+    NUM_PROTOTYPES: 4
+    METHOD: kmeans
+  NUM_CLASSES: 10
   NORM_ATTN: True
   USE_THRESH: True
   NORM_BEFORE_ATTN: True
   RECURRENT_STEP: 1
 DATASETS:
-  TRAIN: casia
-  VAL: lfw
-  TEST: lfw_masked
+  TRAIN: mnist_train
+  VAL: mnist_test
+  TEST: ""
 SOLVER:
   NUM_EPOCHS: 30
   BATCH_SIZE: 32
@@ -26,3 +28,4 @@ SOLVER:
   STEP_SIZE: 5
   STEP_FACTOR: 0.5
   VC_LAMBDA: 1.0
+  P_LAMBDA: 1.0

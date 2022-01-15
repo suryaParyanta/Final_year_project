@@ -1,0 +1,18 @@
+MODEL:
+  NAME: vgg
+  VGG:
+    LAYERS: [2, 2, 3, 3, 3]
+    FILTER: [64, 128, 256, 512, 512]
+  NUM_CLASSES: 10
+DATASETS:
+  TRAIN: mnist_train
+  VAL: mnist_test
+  TEST: mnist_test_occ
+SOLVER:
+  NUM_EPOCHS: 30
+  BATCH_SIZE: 32
+  BASE_LR: 0.001
+  MOMENTUM: 0.9
+  WEIGHT_DECAY: 0.0005
+  STEP_SIZE: 5
+  STEP_FACTOR: 0.5

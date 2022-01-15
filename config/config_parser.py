@@ -4,6 +4,11 @@ from pathlib import Path
 import sys
 sys.path.append(os.getcwd())
 
+import logging
+logging.basicConfig(format = "%(asctime)s-%(levelname)s:   %(message)s")
+logger = logging.getLogger(__name__)
+print = logger.info
+
 import torch
 from torchvision import transforms
 
@@ -31,6 +36,12 @@ def get_default_cfg():
         "WEIGHTS":  "",
         "PERCENT_U": 0.2,
         "PERCENT_L": 0.8
+    }
+
+    PROTOTYPE = {
+        "NUM_PROTOTYPES": 0,
+        "WEIGHTS": "",
+        "METHOD": "kmeans"
     }
 
     DATASETS = {
@@ -63,7 +74,8 @@ def get_default_cfg():
             "RECURRENT_STEP": 0,
             "RESNETS": RESNETS,
             "VGG": VGG,
-            "ATTN": ATTN
+            "ATTN": ATTN,
+            "PROTOTYPE": PROTOTYPE
         },
         "DATASETS": DATASETS,
         "SOLVER": SOLVER,
@@ -106,7 +118,8 @@ def merge_cfg_from_file(cfg, cfg_file):
 
 def get_model_from_cfg(cfg):
     assert cfg["MODEL"]["NAME"] in ("vgg", "vgg_attn", "vgg_attn_proto", "resnet", "resnet_attn"), "Unsupported model name"
-    
+
+    freeze_epoch = -1
     if cfg["MODEL"]["NAME"] == "vgg":
         model = initialize_vgg(cfg["MODEL"]["NUM_CLASSES"])
         classifier = None
@@ -132,6 +145,7 @@ def get_model_from_cfg(cfg):
             cfg["MODEL"]["ATTN"]["NUM_CLUSTERS"],
             cfg["MODEL"]["PROTOTYPE"]["WEIGHTS"],
             cfg["MODEL"]["ATTN"]["WEIGHTS"],
+            cfg["MODEL"]["PROTOTYPE"]["METHOD"],
             cfg["MODEL"]["RECURRENT_STEP"],
             cfg["MODEL"]["ATTN"]["PERCENT_U"],
             cfg["MODEL"]["ATTN"]["PERCENT_L"]
@@ -162,17 +176,27 @@ def get_model_from_cfg(cfg):
     # load pretrained backbone if any
     for k in ["VGG", "RESNETS"]:
         if os.path.exists(cfg["MODEL"][k]["WEIGHTS"]):
+            print(f"Load pretrained backbone from: {cfg['MODEL'][k]['WEIGHTS']}")
             model.load_state_dict(torch.load(cfg["MODEL"][k]["WEIGHTS"]), strict = False)
 
-            # freeze the model (finetune the classifier first)
-            for param in model.parameters():
-                param.requires_grad = False
+            # freeze the model (finetune the classifier/prototype first)
+            for name, param in model.named_parameters():
+                if "resnet" in cfg["MODEL"]["NAME"]:
+                    freeze_epoch = 7
+                    if "layer4" not in name and "fc" not in name:
+                        param.requires_grad = False
+                else:
+                    freeze_epoch = 10
+                    if "layer5" not in name and "prototype_weight" not in name and "gamma" not in name:
+                        param.requires_grad = False
 
     # load pretrained weight if any
     if os.path.exists(cfg["MODEL"]["WEIGHTS"]):
+        print(f"Load pretrained weight from: {cfg['MODEL']['WEIGHTS']}")
         model.load_state_dict(torch.load(cfg["MODEL"]["WEIGHTS"]))
+    # print("")
     
-    return model, classifier
+    return model, classifier, freeze_epoch
 
 
 def get_dataloader_from_cfg(cfg):
@@ -254,6 +278,12 @@ def get_dataloader_from_cfg(cfg):
         num_images = 1
         loader = None
         if dataset is not None:
+            print("")
+            print(f"{k} DATASET")
+            print(f"Root folder: {root}")
+            print(f"Annotation file: {train_annot}")
+            print(f"Images directory: {train_data}")
+
             num_images = len(dataset)
             loader = get_data_loader(
                 dataset,
@@ -286,10 +316,22 @@ def get_parameters_from_cfg(cfg):
 
     for k in ["VAL", "TEST"]:
         if cfg["DATASETS"][k] == "lfw_masked":
+            print("")
+            print(f"{k} DATASET")
+            print("Root folder: dataset/LFW_pairs_aligned")
+            print("Annotation file: pairs_masked.txt")
+            print("Images directory: Combined")
+
             params[f"{k.lower()}_root"] = "dataset/LFW_pairs_aligned"
             params[f"{k.lower()}_images"] = "Combined"
             params[f"{k.lower()}_filelist"] = "pairs_masked.txt"
         elif cfg["DATASETS"][k] == "lfw":
+            print("")
+            print(f"{k} DATASET")
+            print("Root folder: dataset/LFW_pairs_aligned")
+            print("Annotation file: pairs.txt")
+            print("Images directory: Images")
+
             params[f"{k.lower()}_root"] = "dataset/LFW_pairs_aligned"
             params[f"{k.lower()}_images"] = "Images"
             params[f"{k.lower()}_filelist"] = "pairs.txt"
