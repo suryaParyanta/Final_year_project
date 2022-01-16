@@ -259,13 +259,13 @@ if __name__ == '__main__':
     if args.device == "cpu":
         args.device_ids = []
 
-    cfg = merge_cfg_from_file(cfg, args.config_file)
-    save_dir = get_savedir(cfg, args.config_file)
-
     # setup logging
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
+    cfg = merge_cfg_from_file(cfg, args.config_file)
+    save_dir = get_savedir(cfg, args.config_file)
+    
     fh = logging.FileHandler(os.path.join(save_dir, "training.log"), 'a')
     fh.setLevel(logging.DEBUG)
     formatter = logging.Formatter("%(asctime)s-%(levelname)s:   %(message)s")
