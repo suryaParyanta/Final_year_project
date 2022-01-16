@@ -20,7 +20,7 @@ MODEL:
 DATASETS:
   TRAIN: mnist_train
   VAL: mnist_test
-  TEST: mnist_test_occ
+  TEST: mnist_test_occ_black
 SOLVER:
   NUM_EPOCHS: 20
   BATCH_SIZE: 32

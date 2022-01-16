@@ -105,7 +105,7 @@ def merge_cfg_from_file(cfg, cfg_file):
     base_file = os.path.join(dir, base_cfg)
     
     # merge with base
-    if os.path.exists(base_file):
+    if os.path.exists(base_file) and not os.path.isdir(base_file):
         with open(base_file, 'r') as f:
             _C_BASE = yaml.load(f, yaml.Loader)
         merge_cfg(cfg, _C_BASE)
@@ -207,9 +207,11 @@ def get_model_from_cfg(cfg):
 
 
 def get_dataloader_from_cfg(cfg):
-    assert cfg["DATASETS"]["TRAIN"] in ["mnist_train", "casia"], "Unsupported train dataset name."
-    assert cfg["DATASETS"]["VAL"] in ["", "mnist_train", "mnist_test", "mnist_test_occ", "lfw", "lfw_masked"], "Unsupported val/test dataset name."
-    assert cfg["DATASETS"]["TEST"] in ["", "mnist_train", "mnist_test", "mnist_test_occ", "lfw", "lfw_masked"], "Unsupported val/test dataset name."
+    supp_train_data = ["", "mnist_train", "casia"]
+    supp_test_data = ["", "mnist_train", "mnist_test", "mnist_test_occ_black", "mnist_test_occ_gauss", "mnist_test_occ_flower", "lfw", "lfw_masked"]
+    assert cfg["DATASETS"]["TRAIN"] in supp_train_data, "Unsupported train dataset name."
+    assert cfg["DATASETS"]["VAL"] in supp_test_data, "Unsupported val/test dataset name."
+    assert cfg["DATASETS"]["TEST"] in supp_test_data, "Unsupported val/test dataset name."
     
     loaders = []
     num_dataset_images = []
@@ -266,10 +268,34 @@ def get_dataloader_from_cfg(cfg):
                 transform
             )
 
-        elif cfg["DATASETS"][k] == "mnist_test_occ":
+        elif cfg["DATASETS"][k] == "mnist_test_occ_black":
             root = "dataset/MNIST_224X224_3"
             train_annot = "pairs_test.txt"
             train_data = "test_occ_black"
+
+            dataset, _ = get_dataset(
+                root,
+                train_data,
+                train_annot,
+                transform
+            )
+
+        elif cfg["DATASETS"][k] == "mnist_test_occ_gauss":
+            root = "dataset/MNIST_224X224_3"
+            train_annot = "pairs_test.txt"
+            train_data = "test_occ_gauss"
+
+            dataset, _ = get_dataset(
+                root,
+                train_data,
+                train_annot,
+                transform
+            )
+
+        elif cfg["DATASETS"][k] == "mnist_test_occ_flower":
+            root = "dataset/MNIST_224X224_3"
+            train_annot = "pairs_test.txt"
+            train_data = "test_occ_flower"
 
             dataset, _ = get_dataset(
                 root,
@@ -360,7 +386,7 @@ def get_savedir(cfg, cfg_file):
         save_dir = save_dir + f'_{idx}'
 
     # save config file into the directory
-    save_filename = os.path.basename(cfg_file)
+    save_filename = "config.yaml"
     with open(os.path.join(save_dir, save_filename), 'w') as f:
         yaml.dump(cfg, f)
 
