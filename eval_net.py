@@ -1,5 +1,7 @@
 import os
+import logging
 import argparse
+
 from PIL import Image
 import numpy as np
 
@@ -8,46 +10,14 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as F_t
 from torchvision import transforms
 
-from Code.dataset_helpers import get_dataset, get_data_loader
-from Code.network.vgg_backbone import initialize_vgg, initialize_vgg_attn, initialize_vgg_attn_prototype
-from Code.network.resnet_backbone import initialize_LResNet50_attn, initialize_LResNet50_IR
+from config.config_parser import *
 
 def parse_argument():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '--dataset',
-        help = 'Dataset used',
-        default = 'lfw',
-        type = str
-    )
-
-    parser.add_argument(
-        '--model_type',
-        help = 'Model used for evaluation',
-        choices = ['vgg16', 'vgg16_prototype', 'vgg16_attn', 'resnet', 'resnet_attn'],
-        default = 'resnet_attn',
-        type = str
-    )
-
-    parser.add_argument(
-        '--model_weight',
-        help = 'Pretrained model weight',
-        default = 'results/resnet_64_second_attn_casia_4/epoch_2.pt',
-        type = str
-    )
-
-    parser.add_argument(
-        '--prototype_weight',
-        help = 'Path to prototype weight',
-        default = 'prototype_weight/prototype_vgg16.pkl',
-        type = str
-    )
-
-    parser.add_argument(
-        '--feature_dict',
-        help = 'Path to feature dictionary weight file',
-        default = 'feature_dictionary/CASIA/100000/dictionary_second_64.pickle',
+        '--config_file',
+        help = 'Path to the config file',
         type = str
     )
 
@@ -265,83 +235,64 @@ def lfw_eval(model, root, image_dir, pairs_filelist, device = 'cpu', file_ext = 
     return np.mean(accuracy), np.mean(best_thresholds), np.std(accuracy)
 
 
+def setup_eval(args, cfg):
+    assert len(cfg['DATASETS']['VAL']) or len(cfg['DATASETS']['TEST']), "Dataset names are not specified"
+    cfg['DATASETS']['TRAIN'] = ""
+
+    model, *_ = get_model_from_cfg(cfg)
+
+    num_images, _, val_loader, test_loader = get_dataloader_from_cfg(cfg)
+    
+    params = get_parameters_from_cfg(cfg)
+    params["num_val_images"] = num_images[1]
+    params["num_test_images"] = num_images[2]
+
+    if val_loader is not None:
+        print("")
+        print(f"Evaluation on {cfg['DATASETS']['VAL']} using {cfg['MODEL']['NAME']}")
+        val_acc = get_accuracy(model, val_loader, device = args.device)
+        print(f"Accuracy on {cfg['DATASETS']['VAL']}: {round(val_acc / params['num_val_images'], 3)}")
+    elif params["val_root"] != "":
+        print("")
+        print(f"Evaluation on {cfg['DATASETS']['VAL']} using {cfg['MODEL']['NAME']}")
+        
+        acc, threshold, std = lfw_eval(
+            model,
+            params["val_root"],
+            params["val_images"],
+            params["val_filelist"],
+            device = args.device
+        )
+        print(f"Accuracy on {cfg['DATASETS']['VAL']}: {round(acc, 3)} %,  std = {round(std, 3)},  threshold = {round(threshold, 3)}")
+    
+    if test_loader is not None:
+        print("")
+        print(f"Evaluation on {cfg['DATASETS']['TEST']} using {cfg['MODEL']['NAME']}")
+        test_acc = get_accuracy(model, test_loader, device = args.device)
+        print(f"Accuracy on {cfg['DATASETS']['TEST']}: {round(test_acc / params['num_test_images'], 3)}")
+    elif params["test_root"] != "":
+        print("")
+        print(f"Evaluation on {cfg['DATASETS']['TEST']} using {cfg['MODEL']['NAME']}")
+        
+        acc, threshold, std = lfw_eval(
+            model,
+            params["test_root"],
+            params["test_images"],
+            params["test_filelist"],
+            device = args.device
+        )
+        print(f"Accuracy on {cfg['DATASETS']['TEST']}: {round(acc, 3)} %,  std = {round(std, 3)},  threshold = {round(threshold, 3)}")
+
+
 if __name__ == '__main__':
     args = parse_argument()
 
-    assert args.dataset in ['mnist', 'lfw'], 'Dataset must be in [mnist, lfw]'
-    
-    if args.dataset =='mnist':
-        assert args.model_type in ['vgg16', 'vgg_attn_prototype'], 'Model type must be in [vgg16, vgg_attn_prototype] for MNIST dataset'
+    # setup logging
+    logging.basicConfig(format = "%(asctime)s-%(levelname)s:   %(message)s")
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
 
-        root = '../dataset/MNIST_224X224_3'
-        train_annot = 'pairs_train.txt'
-        train_data = 'train'
+    cfg = get_default_cfg()
+    cfg = merge_cfg_from_file(cfg, args.config_file)
 
-        test_annot = 'pairs_test.txt'
-        test_data = 'test_occ_black'
-
-        num_classes = 10
-
-        # Define transformation
-        transform = transforms.Compose([
-            transforms.ToTensor()
-        ])
-
-        MNIST_train, MNIST_test = get_dataset(
-            root,
-            train_data,
-            train_annot,
-            transform,
-            test_data_dir = test_data,
-            test_annot_path = test_annot,
-            transform_test = transform
-        )
-
-        args.num_train_images = len(MNIST_train)
-        if MNIST_test is not None:
-            args.num_test_images = len(MNIST_test)
-
-        train_loader = get_data_loader(MNIST_train, batch_size = 64)
-        test_loader = get_data_loader(MNIST_test, batch_size = 64)
-
-        if args.model_type == 'vgg16':
-            model = initialize_vgg(num_classes = num_classes)
-        elif args.model_type == 'vgg_attn_prototype':
-            model = initialize_vgg_attn_prototype(args.prototype_weight, args.feature_dict, num_classes = num_classes)
-        
-        model.load_state_dict(torch.load(args.model_weight))
-
-        # evaluation
-        train_acc = get_accuracy(model, train_loader, device = args.device)
-        print(f'Accuracy on training set: {round(100 * train_acc/args.num_train_images, 2)} %')
-        test_acc = get_accuracy(model, test_loader, device = args.device)
-        print(f'Accuracy on test set: {round(100 * test_acc/args.num_test_images, 2)} %')
-    
-    elif args.dataset == 'lfw':
-        num_classes = 10575
-
-        args.test_root = 'dataset/LFW_pairs_aligned'
-        args.test_images = 'Combined'
-        args.test_filelist = 'pairs_masked.txt'
-
-        if args.model_type == "vgg_16_attn":
-            model = initialize_vgg_attn(64, args.feature_dict)
-            model.load_state_dict(torch.load(args.model_weight))
-        elif args.model_type == "resnet_attn":
-            model = initialize_LResNet50_attn(64, args.feature_dict)
-            model.load_state_dict(torch.load(args.model_weight))
-            model._clean_feature_dict()
-        elif args.model_type == "resnet":
-            model = initialize_LResNet50_IR()
-            model.load_state_dict(torch.load(args.model_weight))        
-
-        acc, threshold, acc_std = lfw_eval(
-            model, 
-            args.test_root, 
-            args.test_images, 
-            args.test_filelist, 
-            device = args.device, 
-            file_ext=''
-        )
-
-        print(f"LFW accuracy = {acc} %,  std = {acc_std},  threshold = {threshold}")
+    setup_eval(args, cfg)
