@@ -4,6 +4,7 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import Sampler
+from torchvision import transforms
 
 
 def PIL_loader(file_path:str):
@@ -203,6 +204,139 @@ def get_data_loader(dataset, batch_size:int = 128, num_workers:int = 0, shuffle:
     )
 
     return loader
+
+
+def get_dataset_from_name(name):
+    supp_train_data = ["", "mnist_train", "casia"]
+    supp_test_data = ["", "mnist_test", "lfw", "lfw_masked"]
+    black_occ = ["mnist_test_occ_black_1", "mnist_test_occ_black_2", "mnist_test_occ_black_3"]
+    white_occ = ["mnist_test_occ_white_1", "mnist_test_occ_white_2", "mnist_test_occ_white_3"]
+    gauss_occ = ["mnist_test_occ_gauss_1", "mnist_test_occ_gauss_2", "mnist_test_occ_gauss_3"]
+    natural_occ = ["mnist_test_occ_natural_1", "mnist_test_occ_natural_2", "mnist_test_occ_natural_3"]
+
+    assert name in supp_train_data + supp_test_data + black_occ + white_occ + gauss_occ + natural_occ, "Unsupported dataset name"
+
+    # define transformation
+    if "mnist" in name:
+        transform = transforms.Compose([
+            transforms.ToTensor()
+        ])
+    elif name == "casia":
+        transform = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+        ])
+
+    # get pytorch dataset
+    if name == "mnist_train":
+        root = "dataset/MNIST_224X224_3"
+        annot = "pairs_train.txt"
+        data = "train"
+
+        dataset, _ = get_dataset(
+            root,
+            data,
+            annot,
+            transform
+        )
+
+    elif name == "casia":
+        root = "dataset"
+        annot = "CASIA_aligned_list.txt"
+        data = "CASIA_aligned"
+
+        dataset, _ = get_dataset(
+            root,
+            data,
+            annot,
+            transform,
+            mode = 'annotation'
+        )
+
+    elif name == "mnist_test":
+        root = "dataset/MNIST_224X224_3"
+        annot = "pairs_test.txt"
+        data = "test"
+
+        dataset, _ = get_dataset(
+            root,
+            data,
+            annot,
+            transform
+        )
+
+    elif "mnist_test_occ_black" in name :
+        level = name.split("_")[-1]
+        root = "dataset/MNIST_224X224_3"
+        annot = "pairs_test.txt"
+        data = f"test_occ_black_{level}"
+
+        dataset, _ = get_dataset(
+            root,
+            data,
+            annot,
+            transform
+        )
+
+    elif "mnist_test_occ_white" in name:
+        level = name.split("_")[-1]
+        root = "dataset/MNIST_224X224_3"
+        annot = "pairs_test.txt"
+        data = f"test_occ_white_{level}"
+
+        dataset, _ = get_dataset(
+            root,
+            data,
+            annot,
+            transform
+        )
+
+    elif "mnist_test_occ_gauss" in name:
+        level = name.split("_")[-1]
+        root = "dataset/MNIST_224X224_3"
+        annot = "pairs_test.txt"
+        data = f"test_occ_gauss_{level}"
+
+        dataset, _ = get_dataset(
+            root,
+            data,
+            annot,
+            transform
+        )
+
+    elif "mnist_test_occ_natural" in name:
+        level = name.split("_")[-1]
+        root = "dataset/MNIST_224X224_3"
+        annot = "pairs_test.txt"
+        data = f"test_occ_natural_{level}"
+
+        dataset, _ = get_dataset(
+            root,
+            data,
+            annot,
+            transform
+        )
+    
+    elif name == "lfw_masked":
+        root = "dataset/LFW_pairs_aligned"
+        annot = "pairs_masked.txt"
+        data = "Combined"
+        dataset = None
+    
+    elif name == "lfw":
+        root = "dataset/LFW_pairs_aligned"
+        annot = "pairs.txt"
+        data = "Images"
+        dataset = None
+
+    else:
+        root = "Not found"
+        annot = "Not found"
+        data = "Not found"
+        dataset = None
+    
+    return dataset, (root, annot, data)
 
 
 if __name__ == '__main__':
