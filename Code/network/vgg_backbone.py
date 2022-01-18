@@ -340,7 +340,7 @@ class VGG_Attention_Prototype(VGG_16):
         proto_weight = np.ndarray((self.num_classes, self.num_prototype, 512, 7, 7)).astype(np.float32)
 
         # load pretrained MNIST VGG
-        vgg_pretrain_path = "pretrained_weight/VGG_MNIST.pt"
+        vgg_pretrain_path = "pretrained_weight/VGG_MNIST/best.pt"
         assert os.path.exists(vgg_pretrain_path), f"{vgg_pretrain_path} not exists"
 
         pretrain_vgg = initialize_vgg(self.num_classes)
@@ -583,8 +583,8 @@ class VGG_Attention_Prototype(VGG_16):
 
         additional_output = {
             'attn_pool4': attn_pool4,
-            'distance_class': distance_class,
-            'assigned_prototype': assigned_prototype
+            'distance_class': distance_class.detach().clone(),
+            'assigned_prototype': assigned_prototype.detach().clone()
         }
         return score, additional_loss, additional_output
 
