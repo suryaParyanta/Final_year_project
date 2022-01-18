@@ -137,7 +137,7 @@ if __name__ == '__main__':
 
     # load model
     model = initialize_vgg()
-    model.load_state_dict(torch.load("pretrained_weight/VGG_MNIST.pt"))
+    model.load_state_dict(torch.load("pretrained_weight/VGG_MNIST/best.pt"))
     for param in model.parameters():
         param.requires_grad = False
 
