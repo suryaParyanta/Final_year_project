@@ -22,6 +22,13 @@ def parse_argument():
     )
 
     parser.add_argument(
+        '--weight',
+        help = 'Path to the model weight',
+        default = "",
+        type = str
+    )
+
+    parser.add_argument(
         '--device',
         help = 'Device to use for training',
         default = 'cuda',
@@ -236,52 +243,38 @@ def lfw_eval(model, root, image_dir, pairs_filelist, device = 'cpu', file_ext = 
 
 
 def setup_eval(args, cfg):
-    assert len(cfg['DATASETS']['VAL']) or len(cfg['DATASETS']['TEST']), "Dataset names are not specified"
-    cfg['DATASETS']['TRAIN'] = ""
+    assert len(cfg['DATASETS']['TEST']), "Dataset names are not specified"
+    cfg['DATASETS']['TRAIN'] = []
+    cfg['DATASETS']['VAL'] = []
 
     model, *_ = get_model_from_cfg(cfg)
 
-    num_images, _, val_loader, test_loader = get_dataloader_from_cfg(cfg)
+    if os.path.exists(args.weight):
+        model.load_state_dict(torch.load(args.weight))
+
+    num_images, *_, test_loaders = get_dataloader_from_cfg(cfg)
     
     params = get_parameters_from_cfg(cfg)
-    params["num_val_images"] = num_images[1]
     params["num_test_images"] = num_images[2]
-
-    if val_loader is not None:
-        print("")
-        print(f"Evaluation on {cfg['DATASETS']['VAL']} using {cfg['MODEL']['NAME']}")
-        val_acc = get_accuracy(model, val_loader, device = args.device)
-        print(f"Accuracy on {cfg['DATASETS']['VAL']}: {round(val_acc / params['num_val_images'], 3)}")
-    elif params["val_root"] != "":
-        print("")
-        print(f"Evaluation on {cfg['DATASETS']['VAL']} using {cfg['MODEL']['NAME']}")
-        
-        acc, threshold, std = lfw_eval(
-            model,
-            params["val_root"],
-            params["val_images"],
-            params["val_filelist"],
-            device = args.device
-        )
-        print(f"Accuracy on {cfg['DATASETS']['VAL']}: {round(acc, 3)} %,  std = {round(std, 3)},  threshold = {round(threshold, 3)}")
     
-    if test_loader is not None:
-        print("")
-        print(f"Evaluation on {cfg['DATASETS']['TEST']} using {cfg['MODEL']['NAME']}")
-        test_acc = get_accuracy(model, test_loader, device = args.device)
-        print(f"Accuracy on {cfg['DATASETS']['TEST']}: {round(test_acc / params['num_test_images'], 3)}")
-    elif params["test_root"] != "":
-        print("")
-        print(f"Evaluation on {cfg['DATASETS']['TEST']} using {cfg['MODEL']['NAME']}")
-        
-        acc, threshold, std = lfw_eval(
-            model,
-            params["test_root"],
-            params["test_images"],
-            params["test_filelist"],
-            device = args.device
-        )
-        print(f"Accuracy on {cfg['DATASETS']['TEST']}: {round(acc, 3)} %,  std = {round(std, 3)},  threshold = {round(threshold, 3)}")
+    face_eval = 1
+    for test_loader in test_loaders:
+        if test_loader is not None:
+            print("")
+            print(f"Evaluation on {cfg['DATASETS']['TEST']} using {cfg['MODEL']['NAME']}")
+            test_acc = get_accuracy(model, test_loader, device = args.device)
+            print(f"Accuracy on {cfg['DATASETS']['TEST']}: {round(test_acc / params['num_test_images'], 3)}")
+
+        elif len(params["TEST"]) and face_eval:
+            for name, root, data_dir, annot in params["TEST"]:
+                print("")
+                print(f"Evaluation on {name} using {cfg['MODEL']['NAME']}")
+                acc, threshold, std = lfw_eval(model, root, data_dir, annot, device = args.device)
+                print(f"Accuracy on {cfg['DATASETS']['TEST']}: {round(acc, 3)} %,  std = {round(std, 3)},  threshold = {round(threshold, 3)}")
+            face_eval = 0
+            
+        else:
+            print("Dataset not found.")
 
 
 if __name__ == '__main__':
