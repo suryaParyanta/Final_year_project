@@ -9,8 +9,8 @@ MODEL:
     PERCENT_U: 0.2
     PERCENT_L: 0.8
   PROTOTYPE:
-    WEIGHTS: prototype_weight/prototype_10_4_MNIST.pkl
-    NUM_PROTOTYPES: 4
+    WEIGHTS: prototype_weight/prototype_10_8_MNIST.pkl
+    NUM_PROTOTYPES: 8
     METHOD: kmeans
   NUM_CLASSES: 10
   NORM_ATTN: True

@@ -12,7 +12,7 @@ print = logger.info
 import torch
 from torchvision import transforms
 
-from Code.dataset_helpers import get_dataset, get_data_loader
+from Code.dataset_helpers import get_dataset_from_name, get_data_loader
 from Code.network.vgg_backbone import initialize_vgg, initialize_vgg_attn, initialize_vgg_attn_prototype
 from Code.network.resnet_backbone import initialize_LResNet50_IR, initialize_LResNet50_attn
 from Code.network.classifier import MarginCosineProduct
@@ -132,8 +132,8 @@ def get_model_from_cfg(cfg):
             cfg["MODEL"]["ATTN"]["PERCENT_U"],
             cfg["MODEL"]["ATTN"]["PERCENT_L"]
         )
-        # freeze feature dictionary for first 10 epochs
-        freeze_epoch = 10
+        # freeze feature dictionary for first 5 epochs
+        freeze_epoch = 5
         model.feature_dict.requires_grad = False
 
         classifier = MarginCosineProduct(
@@ -153,7 +153,7 @@ def get_model_from_cfg(cfg):
             cfg["MODEL"]["ATTN"]["PERCENT_U"],
             cfg["MODEL"]["ATTN"]["PERCENT_L"]
         )
-        # freeze feature dictionary for several epochs
+        # freeze feature dictionary for 10 epochs
         freeze_epoch = 10
         model.feature_dict.requires_grad = False
         classifier = None
@@ -173,8 +173,8 @@ def get_model_from_cfg(cfg):
             cfg["MODEL"]["ATTN"]["PERCENT_U"],
             cfg["MODEL"]["ATTN"]["PERCENT_L"]
         )
-        # freeze feature dictionary for several epochs
-        freeze_epoch = 10
+        # freeze feature dictionary for 5 epochs
+        freeze_epoch = 5
         model.feature_dict.requires_grad = False
 
         classifier = MarginCosineProduct(
@@ -188,15 +188,18 @@ def get_model_from_cfg(cfg):
             print(f"Load pretrained backbone from: {cfg['MODEL'][k]['WEIGHTS']}")
             model.load_state_dict(torch.load(cfg["MODEL"][k]["WEIGHTS"]), strict = False)
 
-            freeze_epoch = 10
-            # freeze the model (finetune the classifier/prototype first)
+            # freeze the model (finetune the classifier / prototype first)
             for name, param in model.named_parameters():
                 if "resnet" in cfg["MODEL"]["NAME"]:
                     if "layer4" not in name and "fc" not in name:
                         param.requires_grad = False
                 else:
-                    if "layer5" not in name and "prototype_weight" not in name and "gamma" not in name:
+                    if "layer5" not in name and "prototype" not in name:
                         param.requires_grad = False
+                
+                    # finetune prototype
+                    if "prototype" in name:
+                        model.layer5.requiers_grad = False
 
     # load pretrained weight if any
     if os.path.exists(cfg["MODEL"]["WEIGHTS"]):
@@ -204,129 +207,38 @@ def get_model_from_cfg(cfg):
         model.load_state_dict(torch.load(cfg["MODEL"]["WEIGHTS"]))
     
     return model, classifier, freeze_epoch
-
+    
 
 def get_dataloader_from_cfg(cfg):
-    supp_train_data = ["", "mnist_train", "casia"]
-    supp_test_data = ["", "mnist_train", "mnist_test", "mnist_test_occ_black", "mnist_test_occ_gauss", "mnist_test_occ_flower", "lfw", "lfw_masked"]
-    assert cfg["DATASETS"]["TRAIN"] in supp_train_data, "Unsupported train dataset name."
-    assert cfg["DATASETS"]["VAL"] in supp_test_data, "Unsupported val/test dataset name."
-    assert cfg["DATASETS"]["TEST"] in supp_test_data, "Unsupported val/test dataset name."
-    
     loaders = []
-    num_dataset_images = []
+    dataset_info = []
     keys = ["TRAIN", "VAL", "TEST"]
 
     for k in keys:
-        transform = None
-        if "mnist" in cfg["DATASETS"][k]:
-            transform = transforms.Compose([
-                transforms.ToTensor()
-            ])
-        elif cfg["DATASETS"][k] == "casia":
-            transform = transforms.Compose([
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-            ])
+        assert isinstance(cfg["DATASETS"][k], list) or isinstance(cfg["DATASETS"][k], tuple), "Datasets must be in list or tuple"
+        print("")
+        print(f"{k} DATASET")
 
-        # get pytorch dataset
-        if cfg["DATASETS"][k] == "mnist_train":
-            root = "dataset/MNIST_224X224_3"
-            train_annot = "pairs_train.txt"
-            train_data = "train"
-
-            dataset, _ = get_dataset(
-                root,
-                train_data,
-                train_annot,
-                transform
-            )
-
-        elif cfg["DATASETS"][k] == "casia":
-            root = "dataset"
-            train_annot = "CASIA_aligned_list.txt"
-            train_data = "CASIA_aligned"
-
-            dataset, _ = get_dataset(
-                root,
-                train_data,
-                train_annot,
-                transform,
-                mode = 'annotation'
-            )
-
-        elif cfg["DATASETS"][k] == "mnist_test":
-            root = "dataset/MNIST_224X224_3"
-            train_annot = "pairs_test.txt"
-            train_data = "test"
-
-            dataset, _ = get_dataset(
-                root,
-                train_data,
-                train_annot,
-                transform
-            )
-
-        elif cfg["DATASETS"][k] == "mnist_test_occ_black":
-            root = "dataset/MNIST_224X224_3"
-            train_annot = "pairs_test.txt"
-            train_data = "test_occ_black"
-
-            dataset, _ = get_dataset(
-                root,
-                train_data,
-                train_annot,
-                transform
-            )
-
-        elif cfg["DATASETS"][k] == "mnist_test_occ_gauss":
-            root = "dataset/MNIST_224X224_3"
-            train_annot = "pairs_test.txt"
-            train_data = "test_occ_gauss"
-
-            dataset, _ = get_dataset(
-                root,
-                train_data,
-                train_annot,
-                transform
-            )
-
-        elif cfg["DATASETS"][k] == "mnist_test_occ_flower":
-            root = "dataset/MNIST_224X224_3"
-            train_annot = "pairs_test.txt"
-            train_data = "test_occ_flower"
-
-            dataset, _ = get_dataset(
-                root,
-                train_data,
-                train_annot,
-                transform
-            )
-        
-        else:
-            dataset = None
-        
-        # get pytorch dataloader
-        num_images = 1
-        loader = None
-        if dataset is not None:
-            print("")
-            print(f"{k} DATASET")
+        info = []
+        dataset_loader = []
+        for name in cfg["DATASETS"][k]:
+            dataset, (root, annot, data) = get_dataset_from_name(name)
+                
             print(f"Root folder: {root}")
-            print(f"Annotation file: {train_annot}")
-            print(f"Images directory: {train_data}")
+            print(f"Annotation file: {annot}")
+            print(f"Images directory: {data}")
+            print("")
 
-            num_images = len(dataset)
-            loader = get_data_loader(
-                dataset,
-                cfg["SOLVER"]["BATCH_SIZE"]
-            )
-        num_dataset_images.append(num_images)
-        loaders.append(loader)
+            num_images = 1 if dataset is None else len(dataset)
+            loader = None if dataset is None else get_data_loader(dataset, cfg["SOLVER"]["BATCH_SIZE"])
+            info.append([name, num_images])
+            dataset_loader.append(loader)
+
+        dataset_info.append(info)
+        loaders.append(dataset_loader)
 
     train_loader, val_loader, test_loader = loaders
-    return num_dataset_images, train_loader, val_loader, test_loader
+    return dataset_info, train_loader, val_loader, test_loader
 
 
 def get_parameters_from_cfg(cfg):
@@ -339,35 +251,17 @@ def get_parameters_from_cfg(cfg):
         "lambda2": cfg["SOLVER"]["VC_LAMBDA"],
         "step_size": cfg["SOLVER"]["STEP_SIZE"],
         "step_factor": cfg["SOLVER"]["STEP_FACTOR"],
-        "val_root": "",
-        "val_images": "",
-        "val_filelist": "",
-        "test_root": "",
-        "test_images": "",
-        "test_filelist": ""
+        "VAL": [],
+        "TEST": []
     }
 
     for k in ["VAL", "TEST"]:
-        if cfg["DATASETS"][k] == "lfw_masked":
-            print("")
-            print(f"{k} DATASET")
-            print("Root folder: dataset/LFW_pairs_aligned")
-            print("Annotation file: pairs_masked.txt")
-            print("Images directory: Combined")
+        for name in cfg["DATASETS"][k]:
+            if name == "lfw_masked":
+                params[k].append([name, "dataset/LFW_pairs_aligned", "Combined", "pairs_masked.txt"])
 
-            params[f"{k.lower()}_root"] = "dataset/LFW_pairs_aligned"
-            params[f"{k.lower()}_images"] = "Combined"
-            params[f"{k.lower()}_filelist"] = "pairs_masked.txt"
-        elif cfg["DATASETS"][k] == "lfw":
-            print("")
-            print(f"{k} DATASET")
-            print("Root folder: dataset/LFW_pairs_aligned")
-            print("Annotation file: pairs.txt")
-            print("Images directory: Images")
-
-            params[f"{k.lower()}_root"] = "dataset/LFW_pairs_aligned"
-            params[f"{k.lower()}_images"] = "Images"
-            params[f"{k.lower()}_filelist"] = "pairs.txt"
+            elif name == "lfw":
+                params[k].append([name, "dataset/LFW_pairs_aligned", "Images", "pairs.txt"])
 
     return params
 

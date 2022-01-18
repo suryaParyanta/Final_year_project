@@ -6,9 +6,9 @@ MODEL:
   OUT_FEATURES: 512
   NUM_CLASSES: 10575
 DATASETS:
-  TRAIN: casia
-  VAL: lfw
-  TEST: lfw_masked
+  TRAIN: [casia]
+  VAL: [lfw]
+  TEST: [lfw_masked]
 SOLVER:
   NUM_EPOCHS: 30
   BATCH_SIZE: 64

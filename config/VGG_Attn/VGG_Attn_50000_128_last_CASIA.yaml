@@ -8,9 +8,9 @@ MODEL:
     PERCENT_U: 0.1
     PERCENT_L: 0.8
 DATASETS:
-  TRAIN: casia
-  VAL: lfw
-  TEST: lfw_masked
+  TRAIN: [casia]
+  VAL: [lfw]
+  TEST: [lfw_masked]
 SOLVER:
   BASE_LR: 0.001
   BATCH_SIZE: 32

@@ -2,9 +2,9 @@ BASE: ../Base-LResNet50IR.yaml
 MODEL:
   WEIGHTS: ""
 DATASETS:
-  TRAIN: casia
-  VAL: lfw
-  TEST: lfw_masked
+  TRAIN: [casia]
+  VAL: [lfw]
+  TEST: [lfw_masked]
 SOLVER:
   BASE_LR: 0.01
   BATCH_SIZE: 16

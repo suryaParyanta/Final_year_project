@@ -16,9 +16,9 @@ MODEL:
   NORM_BEFORE_ATTN: True
   RECURRENT_STEP: 1
 DATASETS:
-  TRAIN: mnist_train
-  VAL: mnist_test
-  TEST: ""
+  TRAIN: [mnist_train]
+  VAL: [mnist_test]
+  TEST: [""]
 SOLVER:
   NUM_EPOCHS: 30
   BATCH_SIZE: 32
