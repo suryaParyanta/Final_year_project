@@ -5,7 +5,7 @@ MODEL:
   ATTN:
     NUM_CLUSTERS: 64
     WEIGHTS: feature_dictionary/CASIA/100000/dictionary_second_64.pickle
-    PERCENT_U: 0.1
+    PERCENT_U: 0.2
     PERCENT_L: 0.8
 DATASETS:
   TRAIN: [casia]
