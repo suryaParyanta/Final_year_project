@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 print = logger.info
 
 import torch
-from torchvision import transforms
 
 from Code.dataset_helpers import get_dataset_from_name, get_data_loader
 from Code.network.vgg_backbone import initialize_vgg, initialize_vgg_attn, initialize_vgg_attn_prototype
