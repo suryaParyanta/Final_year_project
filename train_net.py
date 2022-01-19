@@ -266,7 +266,7 @@ def setup(args, cfg, save_dir):
             freeze_epoch,
             args.device,
             save_dir,
-            log_interval = 1000
+            log_interval = 1
         )
 
 

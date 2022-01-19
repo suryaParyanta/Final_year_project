@@ -115,6 +115,31 @@ def extract_feature(img, model, device:str = 'cpu'):
     return features
 
 
+def extract_masked_features(img, model, device:str = 'cpu'):
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+    ])
+
+    img, img_flip = transform(img), transform(F_t.hflip(img))
+    img, img_flip = img.unsqueeze(0).to(device) , img_flip.unsqueeze(0).to(device)
+
+    feature1, _, additional_output1 = model(img)
+    attn_second_last1 = additional_output1["attn_map"][-1]
+    mask = attn_second_last1 >= 0.9 # filter out low similarities
+    attn_second_last1 = attn_second_last1 * mask
+
+    feature2, _, additional_output2 = model(img_flip)
+    attn_second_last2 = additional_output2["attn_map"][-1]
+    mask = attn_second_last2 >= 0.9
+    attn_second_last2 = attn_second_last2 * mask
+
+    # union
+    attn_combined = attn_second_last1 + attn_second_last2
+    pass 
+
+
 def get_best_threshold(thresholds, distance_pred):
     """
     Determine the best threshold based on the top-1 accuracy.
@@ -165,7 +190,7 @@ def get_lfw_accuracy(threshold:float, distances:list):
     return accuracy
 
 
-def lfw_eval(model, root, image_dir, pairs_filelist, device = 'cpu', file_ext = ''):
+def lfw_eval(model, root, image_dir, pairs_filelist, masked = False, device = 'cpu', file_ext = ''):
     """
     Perform 10-fold cross validation of LFW evaluation. The process consists of:
        1. Receive input of image pairs and pass each of them into the model
@@ -220,8 +245,11 @@ def lfw_eval(model, root, image_dir, pairs_filelist, device = 'cpu', file_ext = 
             with open(os.path.join(root, image_dir, filename2), 'rb') as f:
                 img2 = Image.open(f).convert('RGB')
 
-            feature1 = extract_feature(img1, model, device = device)
-            feature2 = extract_feature(img2, model, device = device)
+            if not masked:
+                feature1 = extract_feature(img1, model, device = device)
+                feature2 = extract_feature(img2, model, device = device)
+            else:
+                pass
 
             distance = feature1.dot(feature2) / (feature1.norm() * feature2.norm() + 1e-5)
             predictions.append([filename1, filename2, distance.item(), same_flag])
@@ -272,7 +300,7 @@ def setup_eval(args, cfg):
                 acc, threshold, std = lfw_eval(model, root, data_dir, annot, device = args.device)
                 print(f"Accuracy on {cfg['DATASETS']['TEST']}: {round(acc, 3)} %,  std = {round(std, 3)},  threshold = {round(threshold, 3)}")
             face_eval = 0
-            
+
         else:
             print("Dataset not found.")
 

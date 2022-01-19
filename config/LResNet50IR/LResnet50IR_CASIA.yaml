@@ -13,4 +13,4 @@ SOLVER:
   STEP_FACTOR: 0.5
   STEP_SIZE: 5
   WEIGHT_DECAY: 0.0005
-SAVE: result
+SAVE: results

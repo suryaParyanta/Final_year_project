@@ -706,6 +706,12 @@ class VGG_Attention(VGG_16):
         self.feature_dict.requires_grad = True
 
     def forward(self, x):
+        x, additional_loss, additional_output = self.recurrence_forward(x)
+        features = self.filter_forward(x, additional_output['attn_map'][-1])
+
+        return features, additional_loss, additional_output
+
+    def recurrence_forward(self, x):
         """
         Forward propagation of VGG16 + Attention map. This consists of:
            1. Feed forward until stage-4 (after pool4 layer) of backbone VGG16
@@ -729,6 +735,8 @@ class VGG_Attention(VGG_16):
         """
         batch_size = x.shape[0]
         num_clusters = self.feature_dict.shape[0]
+        num_channel = self.feature_dict.shape[1]
+        attn_size = x.shape[-1] // 16
         
         vc_loss = 0
         attn_maps = []
@@ -736,12 +744,21 @@ class VGG_Attention(VGG_16):
 
         # forward pass until layer 4
         pool1_result = self.layer1(x)
-        pool2_result = self.layer2(pool1_result)
-        pool3_result = self.layer3(pool2_result)
-        pool4_result = self.layer4(pool3_result)
+        attn = torch.ones(batch_size, 1, attn_size, 1, attn_size, 1, device = pool1_result.device)
+        attn_maps.append(attn.detach().clone())
 
         # recurrence step
         for i in range(self.recurrent_step):
+            # apply attn on pool1
+            pool1_result = pool1_result.reshape(-1, 64, attn_size, 8, attn_size, 8)
+            attn = attn.reshape(-1, 1, 14, 1, 14, 1)
+            pool1_result = pool1_result * attn
+            pool1_result = pool1_result.reshape(-1, 64, 112, 112)
+
+            pool2_result = self.layer2(pool1_result)
+            pool3_result = self.layer3(pool2_result)
+            pool4_result = self.layer4(pool3_result)
+
             norm_feature_dict = F.normalize(self.feature_dict, p=2, dim=1)
             pool4_norm = F.normalize(pool4_result, p=2, dim=1)
 
@@ -754,9 +771,9 @@ class VGG_Attention(VGG_16):
                 similarity_norm = F.conv2d(pool4_norm, norm_feature_dict)
 
             cluster_assign = torch.max(similarity_norm, dim = 1).indices
-            sim_clusters.append(cluster_assign.detach().to('cpu').clone())
+            sim_clusters.append(cluster_assign.detach().clone())
 
-            rshape_feat_dict = norm_feature_dict.reshape(num_clusters, 512)
+            rshape_feat_dict = norm_feature_dict.reshape(num_clusters, num_channel)
             D = rshape_feat_dict[cluster_assign].permute(0,3,1,2)
 
             # compute feature dictionary loss
@@ -783,83 +800,35 @@ class VGG_Attention(VGG_16):
                 attn = attn / torch.max(attn, dim=[2, 3], keepdim = True).values
             
             # store the attention map for visualization
-            attn_maps.append(attn.detach().to('cpu').clone())
+            attn_maps.append(attn.detach().clone())
 
-            # (N, C, 112, 112) -> (N, C, 14, 8, 14, 8)
-            pool1_result = pool1_result.reshape(-1, 64, 14, 8, 14, 8)
-            attn = attn.reshape(-1, 1, 14, 1, 14, 1)
+            additional_loss = {"vc_loss": vc_loss}
+            additional_output = {
+                "attn_map": attn_maps,
+                "sim_cluster": sim_clusters
+            }
 
-            # apply attn on pool1
-            new_pool1 = pool1_result * attn
-            new_pool1 = new_pool1.reshape(-1, 64, 112, 112)
+            return pool1_result, additional_loss, additional_output
 
-            # feed forward again
-            pool2_result = self.layer2(new_pool1)
-            pool3_result = self.layer3(pool2_result)
-            pool4_result = self.layer4(pool3_result)
 
-        new_pool4 = pool4_result
+    def filter_forward(self, x, attn_map):
+        batch_size = x.shape[0]
+        attn_size = x.shape[-1] // 8
 
-        norm_feature_dict = F.normalize(self.feature_dict, p=2, dim=1)
-        pool4_norm = F.normalize(new_pool4, p=2, dim=1)
+        # apply attn on pool1
+        x = x.reshape(-1, 64, attn_size, 8, attn_size, 8)
+        attn_map = attn_map.reshape(-1, 1, 14, 1, 14, 1)
+        x = x * attn_map
+        x = x.reshape(-1, 64, 112, 112)
 
-        # calculate similarity
-        if self.normalize_feature_map:
-            similarity = F.conv2d(pool4_norm, norm_feature_dict)
-            similarity_norm = similarity
-        else:
-            similarity = F.conv2d(new_pool4, norm_feature_dict)
-            similarity_norm = F.conv2d(pool4_norm, norm_feature_dict)
-        
-        # feature dictionary loss
-        cluster_assign = torch.max(similarity_norm, dim=1).indices
-        sim_clusters.append(cluster_assign.detach().to('cpu').clone()) # for visualization
-        rshape_feat_dict = norm_feature_dict.reshape(num_clusters, 512)
-        D = rshape_feat_dict[cluster_assign].permute(0,3,1,2)
-        vc_loss += torch.mean(0.5 * (D - pool4_norm)**2)
-
-        # attention map
-        attn_new = torch.max(similarity, dim=1, keepdim=True).values
-        if self.use_threshold:
-            attn_flat = attn_new.reshape(-1, 14 * 14)
-            percentage_ln = int(14 * 14 * self.percent_l)
-            percentage_un = int(14 * 14 * self.percent_u)
-
-            threshold_l = torch.topk(attn_flat, percentage_ln, dim=1).values[:, -1] #.values get the values (not index) -> size (N, percentage_l)
-            threshold_u = torch.topk(attn_flat, percentage_un, dim=1).values[:, -1]
-            threshold_l = threshold_l.reshape(-1,1,1,1)
-            threshold_u = threshold_u.reshape(-1,1,1,1)
-            threshold_u = threshold_u.repeat(1, 1, 14, 14)
-
-            attn_new = F.relu(attn_new - threshold_l) + threshold_l
-            attn_new = torch.min(torch.max(attn_new, torch.zeros_like(attn_new)), threshold_u)
-            attn_new = attn_new / threshold_u
-        else:
-            attn_new = attn_new / torch.max(attn_new, dim=[2, 3], keepdim=True).values
-        
-        # store attention map for visualization
-        attn_maps.append(attn_new.detach().to('cpu').clone())
-
-        # forward propagation to layer 5
+        pool2_result = self.layer2(x)
+        pool3_result = self.layer3(pool2_result)
+        pool4_result = self.layer4(pool3_result)
         pool5_result = self.layer5(pool4_result)
-        attention = F.avg_pool2d(attn_new, (2,2), stride=2) # average pooling
-        
-        if self.normalize_before_attention:
-            pool5_result = F.normalize(pool5_result, p=2, dim=[1,2,3]) # normalize C, H, W
-        
-        # apply filter and feed into fc layer
-        features = pool5_result * attention
-        features = features.reshape(batch_size, -1)
-        features = self.fc(features)
+        pool5_result = pool5_result.reshape(batch_size, -1)
+        features = self.fc(pool5_result)
 
-        feature = {'features': features}
-        additional_loss = {'vc_loss': vc_loss}
-        additional_output = {
-            'attn_map': attn_maps,
-            'similar_cluster': sim_clusters,
-        }
-
-        return feature, additional_loss, additional_output
+        return {'features': features}
 
 
 def initialize_vgg(num_classes:int = 10):

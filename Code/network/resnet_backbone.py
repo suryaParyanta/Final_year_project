@@ -125,18 +125,17 @@ class LResNet(nn.Module):
 
         x = x.reshape(batch_size, -1)
         x = self.fc(x)
-
-        feature = {'features': x}
+    
+        features = {'features': x}
         additional_loss = {}
         additional_output = {}
 
-        return feature, additional_loss, additional_output
+        return features, additional_loss, additional_output
 
 
 class LResNet_Attention(LResNet):
     """
     """
-
     def __init__(self, block,
                  num_clusters:int, 
                  feature_dict_file:str, 
@@ -225,6 +224,12 @@ class LResNet_Attention(LResNet):
         self.feature_dict.requires_grad = True
 
     def forward(self, x):
+        x, additional_loss, additional_output = self.recurrence_forward(x)
+        features = self.filter_forward(x, additional_output['attn_map'][-1])
+
+        return features, additional_loss, additional_output
+
+    def recurrence_forward(self, x):
         """
         Forward propagation of LResNet50IR + Attention map. This consists of:
            1. Feed forward until stage-3 (second last layer)
@@ -251,13 +256,21 @@ class LResNet_Attention(LResNet):
         init_stage_result = self.conv1(x)
         init_stage_result = self.bn1(init_stage_result)
         init_stage_result = self.prelu1(init_stage_result)
-
-        layer1_result = self.layer1(init_stage_result)
-        layer2_result = self.layer2(layer1_result)
-        layer3_result = self.layer3(layer2_result)
+        attn = torch.ones(batch_size, 1, attn_size, 1, attn_size, 1, device = init_stage_result.device)
+        attn_maps.append(attn.detach().clone())
 
         # recurrence step
         for i in range(self.recurrent_step):
+            # applly filtering 
+            init_stage_result = init_stage_result.reshape(-1, 64, attn_size, 8, attn_size, 8)
+            attn = attn.reshape(-1, 1, attn_size, 1, attn_size, 1)
+            init_stage_result = init_stage_result * attn
+            init_stage_result = init_stage_result.reshape(-1, 64, 224, 224)
+
+            layer1_result = self.layer1(init_stage_result)
+            layer2_result = self.layer2(layer1_result)
+            layer3_result = self.layer3(layer2_result)
+
             self._clean_feature_dict() # clean noise before normalization
             norm_feature_dict = F.normalize(self.feature_dict, p=2, dim=1)
             layer3_norm = F.normalize(layer3_result, p=2, dim=1)
@@ -303,82 +316,32 @@ class LResNet_Attention(LResNet):
             # store the attention map for visualization
             attn_maps.append(attn.detach().clone()) # 28 * 28
 
-            # (N, C, 112, 112) -> (N, C, 14, 8, 14, 8)
-            init_stage_result = init_stage_result.reshape(-1, 64, attn_size, 8, attn_size, 8)
-            attn = attn.reshape(-1, 1, attn_size, 1, attn_size, 1)
+        # end on this!
+        additional_loss = {"vc_loss": vc_loss}
+        additional_output = {'attn_map': attn_maps}
 
-            # apply attn on pool1
-            new_init_stage = init_stage_result * attn
-            new_init_stage = new_init_stage.reshape(-1, 64, 224, 224)
+        return init_stage_result, additional_loss, additional_output
 
-            # feed forward again
-            layer1_result = self.layer1(new_init_stage)
-            layer2_result = self.layer2(layer1_result)
-            layer3_result = self.layer3(layer2_result)
+    def filter_forward(self, x, attn_map):
+        batch_size = x.shape[0]
+        attn_size = x.shape[-1] // 8
 
-        new_layer3 = layer3_result
+        # apply attn on layer1
+        x = x.reshape(-1, 64, attn_size, 8, attn_size, 8)
+        attn_map = attn_map.reshape(-1, 1, attn_size, 1, attn_size, 1)
+        x = x * attn_map
+        x = x.reshape(-1, 64, 224, 224)
 
-        self._clean_feature_dict() # clean the noise before normalization
-        norm_feature_dict = F.normalize(self.feature_dict, p=2, dim=1)
-        layer3_norm = F.normalize(new_layer3, p=2, dim=1)
-
-        # calculate similarity
-        if self.normalize_feature_map:
-            similarity = F.conv2d(layer3_norm, norm_feature_dict)
-            similarity_norm = similarity
-        else:
-            similarity = F.conv2d(new_layer3, norm_feature_dict)
-            similarity_norm = F.conv2d(layer3_norm, norm_feature_dict)
-
-        # feature dictionary loss
-        cluster_assign = torch.max(similarity_norm, dim = 1).indices
-        sim_clusters.append(cluster_assign.detach().clone())
-        rshape_feat_dict = norm_feature_dict.reshape(num_clusters, num_channel)
-        D = rshape_feat_dict[cluster_assign].permute(0,3,1,2)
-        vc_loss += torch.mean(0.5 * (D - layer3_norm)**2)
-
-        # attention map
-        attn_new = torch.max(similarity, dim=1, keepdim=True).values # attention should be (28, 28)
-        if self.use_threshold:
-            attn_flat = attn_new.reshape(-1, attn_size * attn_size)
-            percentage_ln = int(attn_size * attn_size * self.percent_l)
-            percentage_un = int(attn_size * attn_size * self.percent_u)
-
-            threshold_l = torch.topk(attn_flat, percentage_ln, dim=1).values[:, -1] #.values get the values (not index) -> size (N, percentage_l)
-            threshold_u = torch.topk(attn_flat, percentage_un, dim=1).values[:, -1]
-            threshold_l = threshold_l.reshape(-1, 1, 1, 1)
-            threshold_u = threshold_u.reshape(-1, 1, 1, 1)
-            threshold_u = threshold_u.repeat(1, 1, attn_size, attn_size)
-
-            attn_new = F.relu(attn_new - threshold_l) + threshold_l
-            attn_new = torch.min(torch.max(attn_new, torch.zeros_like(attn_new)), threshold_u)
-            attn_new = attn_new / threshold_u
-        else:
-            attn_new = attn_new / torch.max(attn_new, dim=[2, 3], keepdim = True).values
-
-        # store attention map for visualization
-        attn_maps.append(attn_new.detach().clone())
-
-        # forward propagation to layer 4
+        # feed forward again
+        layer1_result = self.layer1(x)
+        layer2_result = self.layer2(layer1_result)
+        layer3_result = self.layer3(layer2_result)
         layer4_result = self.layer4(layer3_result)
-        attention = F.avg_pool2d(attn_new, (2,2), stride=2) # average pooling
-        
-        if self.normalize_before_attention:
-            layer4_result = F.normalize(layer4_result, p=2, dim=[1,2,3]) # normalize C, H, W
 
-        # apply filter and feed into fc layer
-        features = layer4_result * attention
-        features = features.reshape(batch_size, -1)
-        features = self.fc(features)
+        layer4_result = layer4_result.reshape(batch_size, -1)
+        features = self.fc(layer4_result)
 
-        feature = {'features': features}
-        additional_loss = {'vc_loss': vc_loss}
-        additional_output = {
-            'attn_map': attn_maps,
-            'similar_cluster': sim_clusters,
-        }
-
-        return feature, additional_loss, additional_output
+        return {'features': features}
 
 
 def initialize_LResNet50_IR(is_gray:bool = False):
