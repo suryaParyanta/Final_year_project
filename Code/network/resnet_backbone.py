@@ -1,4 +1,3 @@
-import os
 import pickle
 import logging
 logger = logging.getLogger(__name__)
@@ -121,6 +120,7 @@ class LResNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
+
         x = self.layer4(x)
 
         x = x.reshape(batch_size, -1)
@@ -128,9 +128,40 @@ class LResNet(nn.Module):
     
         features = {'features': x}
         additional_loss = {}
-        additional_output = {}
+        additional_output = {"attn_map": [None]}
 
         return features, additional_loss, additional_output
+
+    def recurrence_forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.prelu1(x)
+
+        additional_loss = {}
+        additional_output = {"attn_map": [None]}
+
+        return x, additional_loss, additional_output
+
+    def filter_forward(self, x, attn_map):
+        batch_size = x.shape[0]
+        attn_size = x.shape[-1] // 8
+
+        # apply attn on layer1
+        x = x.reshape(-1, 64, attn_size, 8, attn_size, 8)
+        attn_map = attn_map.reshape(-1, 1, attn_size, 1, attn_size, 1)
+        x = x * attn_map
+        x = x.reshape(-1, 64, 224, 224)
+
+        # feed forward again
+        layer1_result = self.layer1(x)
+        layer2_result = self.layer2(layer1_result)
+        layer3_result = self.layer3(layer2_result)
+        layer4_result = self.layer4(layer3_result)
+
+        layer4_result = layer4_result.reshape(batch_size, -1)
+        features = self.fc(layer4_result)
+
+        return {'features': features}
 
 
 class LResNet_Attention(LResNet):
@@ -316,9 +347,11 @@ class LResNet_Attention(LResNet):
             # store the attention map for visualization
             attn_maps.append(attn.detach().clone()) # 28 * 28
 
-        # end on this!
         additional_loss = {"vc_loss": vc_loss}
-        additional_output = {'attn_map': attn_maps}
+        additional_output = {
+            'attn_map': attn_maps,
+            'sim_cluster': sim_clusters
+        }
 
         return init_stage_result, additional_loss, additional_output
 

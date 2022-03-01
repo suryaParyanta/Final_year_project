@@ -115,29 +115,55 @@ def extract_feature(img, model, device:str = 'cpu'):
     return features
 
 
-def extract_masked_features(img, model, device:str = 'cpu'):
+def extract_mask_features(model, no_mask_img, mask_img, device = 'cpu'):
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
     ])
+    mask_img, mask_img_f = transform(mask_img), transform(F_t.hflip(mask_img))
+    mask_img, mask_img_f = mask_img.unsqueeze(0).to(device), mask_img_f.unsqueeze(0).to(device)
 
-    img, img_flip = transform(img), transform(F_t.hflip(img))
-    img, img_flip = img.unsqueeze(0).to(device) , img_flip.unsqueeze(0).to(device)
+    no_mask_img, no_mask_img_f = transform(no_mask_img), transform(F_t.hflip(no_mask_img))
+    no_mask_img, no_mask_img_f = no_mask_img.unsqueeze(0).to(device), no_mask_img_f.unsqueeze(0).to(device)
 
-    feature1, _, additional_output1 = model(img)
-    attn_second_last1 = additional_output1["attn_map"][-1]
-    mask = attn_second_last1 >= 0.9 # filter out low similarities
-    attn_second_last1 = attn_second_last1 * mask
+    with torch.no_grad():
+        # feed the masked image first
+        mask_feature, _, additional_output = model(mask_img)
+        mask_attn = additional_output["attn_map"][-1]
+        mask_feature_f, _, additional_output_f = model(mask_img_f)
+        mask_attn_f = additional_output_f["attn_map"][-1]
+        mask_features = torch.cat([mask_feature["features"], mask_feature_f["features"]], 1)[0].to('cpu')
 
-    feature2, _, additional_output2 = model(img_flip)
-    attn_second_last2 = additional_output2["attn_map"][-1]
-    mask = attn_second_last2 >= 0.9
-    attn_second_last2 = attn_second_last2 * mask
+        if mask_attn is None or mask_attn_f is None:
+            logging.disable(logging.INFO)
+            temp_config = "pretrained_weight/LResNet50IR_Attn_100000_64_Second_CASIA/config.yaml"
+            temp_weight = "pretrained_weight/LResNet50IR_Attn_100000_64_Second_CASIA/last.pt"
 
-    # union
-    attn_combined = attn_second_last1 + attn_second_last2
-    pass 
+            cfg_temp = get_default_cfg()
+            cfg_temp = merge_cfg_from_file(cfg_temp, temp_config)
+            temp_model, *_ = get_model_from_cfg(cfg_temp)
+            temp_model.load_state_dict(torch.load(temp_weight))
+
+            for p in temp_model.parameters():
+                p.requires_grad = False
+            temp_model.eval()
+            temp_model.to(device)
+
+            *_, temp_output = temp_model(mask_img)
+            mask_attn = temp_output["attn_map"][-1]
+            *_, temp_output_f = temp_model(mask_img_f)
+            mask_attn_f = temp_output_f["attn_map"][-1]
+            logging.disable(logging.NOTSET)
+
+        # now feed no-masked image
+        temp, *_ = model.recurrence_forward(no_mask_img)
+        no_mask_feature = model.filter_forward(temp, mask_attn)
+        temp_f, *_ = model.recurrence_forward(no_mask_img_f)
+        no_mask_feature_f = model.filter_forward(temp_f, mask_attn_f)
+        no_mask_features = torch.cat([no_mask_feature["features"], no_mask_feature_f["features"]], 1)[0].to('cpu')
+        
+    return no_mask_features, mask_features
 
 
 def get_best_threshold(thresholds, distance_pred):
@@ -190,7 +216,7 @@ def get_lfw_accuracy(threshold:float, distances:list):
     return accuracy
 
 
-def lfw_eval(model, root, image_dir, pairs_filelist, masked = False, device = 'cpu', file_ext = ''):
+def lfw_eval(model, root, image_dir, pairs_filelist, device = 'cpu', file_ext = ''):
     """
     Perform 10-fold cross validation of LFW evaluation. The process consists of:
        1. Receive input of image pairs and pass each of them into the model
@@ -219,11 +245,12 @@ def lfw_eval(model, root, image_dir, pairs_filelist, masked = False, device = 'c
             pairs = pairs_lines[i].replace('\n', '').split()
 
             if len(pairs) == 3:
-                # if annotation in form of: img1  img2  label
+                # if annotation in form of: img1  img2  label (used in pairs_masked.txt)
                 if os.path.splitext(pairs[0])[1] in ['.jpg', '.png'] and os.path.splitext(pairs[1])[1] in ['.jpg', '.png']:
                     same_flag = int(pairs[2])
                     filename1 = pairs[0]
                     filename2 = pairs[1]
+
                 else:
                     # same identity
                     same_flag = 1
@@ -245,11 +272,18 @@ def lfw_eval(model, root, image_dir, pairs_filelist, masked = False, device = 'c
             with open(os.path.join(root, image_dir, filename2), 'rb') as f:
                 img2 = Image.open(f).convert('RGB')
 
-            if not masked:
+            # check whether mask is exist or not
+            mask = False
+            # for name in ['cloth.jpg', 'KN95.jpg', 'N95.jpg']:
+            #     if name in filename2:
+            #         mask = True
+            #         break
+
+            if mask:
+                feature1, feature2 = extract_mask_features(model, img1, img2, device = device)
+            else:
                 feature1 = extract_feature(img1, model, device = device)
                 feature2 = extract_feature(img2, model, device = device)
-            else:
-                pass
 
             distance = feature1.dot(feature2) / (feature1.norm() * feature2.norm() + 1e-5)
             predictions.append([filename1, filename2, distance.item(), same_flag])
@@ -272,8 +306,8 @@ def lfw_eval(model, root, image_dir, pairs_filelist, masked = False, device = 'c
 
 def setup_eval(args, cfg):
     assert len(cfg['DATASETS']['TEST']), "Dataset names are not specified"
-    cfg['DATASETS']['TRAIN'] = []
-    cfg['DATASETS']['VAL'] = []
+    cfg['DATASETS']['TRAIN'] = [""]
+    cfg['DATASETS']['VAL'] = [""]
 
     model, *_ = get_model_from_cfg(cfg)
 
@@ -298,7 +332,7 @@ def setup_eval(args, cfg):
                 print("")
                 print(f"Evaluation on {name} using {cfg['MODEL']['NAME']}")
                 acc, threshold, std = lfw_eval(model, root, data_dir, annot, device = args.device)
-                print(f"Accuracy on {cfg['DATASETS']['TEST']}: {round(acc, 3)} %,  std = {round(std, 3)},  threshold = {round(threshold, 3)}")
+                print(f"Accuracy on {name}: {round(acc, 3)} %,  std = {round(std, 3)},  threshold = {round(threshold, 3)}")
             face_eval = 0
 
         else:
