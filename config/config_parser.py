@@ -201,6 +201,7 @@ def get_model_from_cfg(cfg):
             hidden_dim = cfg["MODEL"]["TRANSFORMERS"]["HIDDEN_DIM"],
             position_embedding = cfg["MODEL"]["TRANSFORMERS"]["POSITION_EMBEDDING"],
             train_backbone = cfg["SOLVER"]["TRAIN_BACKBONE"],
+            backbone_weight = cfg["MODEL"]["RESNETS"]["WEIGHTS"],
             num_encoder_layers = cfg["MODEL"]["TRANSFORMERS"]["NUM_ENCODER_LAYERS"],
             num_decoder_layers = cfg["MODEL"]["TRANSFORMERS"]["NUM_DECODER_LAYERS"],
             return_interm_result = cfg["MODEL"]["TRANSFORMERS"]["INTERMEDIATE_RESULTS"],

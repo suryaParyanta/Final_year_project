@@ -1,17 +1,21 @@
 import os
+import logging
+logger = logging.getLogger(__name__)
+print = logger.info
+
 # import sys
 # sys.path.append(os.path.join(os.getcwd(), '../..'))
 
 from Code.network.resnet_backbone import LResNet, IR_Block
 from Code.network.misc import NestedTensor, nested_tensor_from_tensor_list
 from Code.network.position_encoding import build_position_encoding
-from Code.dataset_helpers import get_data_loader, get_dataset
+# from Code.dataset_helpers import get_data_loader, get_dataset
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models._utils import IntermediateLayerGetter
-from torchvision import transforms
+# from torchvision import transforms
 
 from typing import List, Dict
 
@@ -42,11 +46,17 @@ class BackboneBase(nn.Module):
 
 class Backbone(BackboneBase):
     """ResNet backbone with frozen BatchNorm."""
-    def __init__(self, name: str, train_backbone: bool, return_interm_layers: bool, layers: list = [3, 4, 14, 3], filter_list: list = [64, 64, 128, 256, 512]):
+    def __init__(self, name: str, train_backbone: bool, return_interm_layers: bool, layers: list = [3, 4, 14, 3], filter_list: list = [64, 64, 128, 256, 512], weight = ""):
         if name == "resnet50_ir":
             backbone = LResNet(IR_Block, layers = layers, filter_list = filter_list)
         else:
             pass
+
+        if os.path.exists(weight):
+            print(f"Load pretrained backbone from {weight}")
+            backbone.load_state_dict(torch.load(weight))
+        else:
+            print("Backbone pretrained weight not found!")
         
         num_channels = 256 # change to 512 if use last layer
         super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
@@ -68,9 +78,9 @@ class Joiner(nn.Sequential):
         return out, pos
 
 
-def build_backbone(layers: list = [3, 4, 14, 3], filter_list: list = [64, 64, 128, 256, 512], hidden_dim = 256, position_embedding = 'sine', train_backbone = False):
+def build_backbone(layers: list = [3, 4, 14, 3], filter_list: list = [64, 64, 128, 256, 512], backbone_weight = "", hidden_dim = 256, position_embedding = 'sine', train_backbone = False):
     position_embedding = build_position_encoding(hidden_dim, position_embedding)
-    backbone = Backbone("resnet50_ir", train_backbone, return_interm_layers = False, layers = layers, filter_list = filter_list)
+    backbone = Backbone("resnet50_ir", train_backbone, return_interm_layers = False, layers = layers, filter_list = filter_list, weight = backbone_weight)
     model = Joiner(backbone, position_embedding)
     model.num_channels = backbone.num_channels
 

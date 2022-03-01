@@ -88,7 +88,7 @@ class DETR(nn.Module):
         return features, additional_loss, additional_output
 
 
-def build_model(out_features, layers: list = [3, 4, 14, 3], filter_list: list = [64, 64, 128, 256, 512], 
+def build_model(out_features, layers: list = [3, 4, 14, 3], filter_list: list = [64, 64, 128, 256, 512], backbone_weight = "",
                 hidden_dim = 256, position_embedding = 'sine', train_backbone = False, 
                 num_encoder_layers = 6, num_decoder_layers = 6, return_interm_result = True, 
                 num_queries = 64, queries_weight = ""):
@@ -96,6 +96,7 @@ def build_model(out_features, layers: list = [3, 4, 14, 3], filter_list: list = 
     backbone = build_backbone(
         layers= layers,
         filter_list=filter_list,
+        backbone_weight = backbone_weight,
         hidden_dim = hidden_dim,
         position_embedding = position_embedding,
         train_backbone = train_backbone
