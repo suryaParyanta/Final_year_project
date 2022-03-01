@@ -14,6 +14,7 @@ import torch
 from Code.dataset_helpers import get_dataset_from_name, get_data_loader
 from Code.network.vgg_backbone import initialize_vgg, initialize_vgg_attn, initialize_vgg_attn_prototype
 from Code.network.resnet_backbone import initialize_LResNet50_IR, initialize_LResNet50_attn
+from Code.network.detr import build_model
 from Code.network.classifier import MarginCosineProduct
 
 
@@ -28,6 +29,17 @@ def get_default_cfg():
         "WEIGHTS": "",
         "LAYERS": [],
         "FILTER": []
+    }
+
+    TRANSFORMER = {
+        "NUM_ENCODER_LAYERS": 0,
+        "NUM_DECODER_LAYERS": 0,
+        "NUM_HEADS": 0,
+        "NUM_QUERIES": 0,
+        "QUERIES_WEIGHT": "",
+        "HIDDEN_DIM": 0,
+        "POSITION_EMBEDDING": "",
+        "INTERMEDIATE_RESULTS": False
     }
 
     ATTN = {
@@ -53,6 +65,7 @@ def get_default_cfg():
         "NUM_EPOCHS": 30,
         "BATCH_SIZE": 64,
         "BASE_LR": 1e-3,
+        "TRAIN_BACKBONE": True,
         "MOMENTUM": 0.9,
         "WEIGHT_DECAY": 5e-4,
         "STEP_SIZE": 5,
@@ -72,6 +85,7 @@ def get_default_cfg():
             "NORM_BEFORE_ATTN": False,
             "RECURRENT_STEP": 0,
             "RESNETS": RESNETS,
+            "TRANSFORMERS": TRANSFORMER, 
             "VGG": VGG,
             "ATTN": ATTN,
             "PROTOTYPE": PROTOTYPE
@@ -116,7 +130,7 @@ def merge_cfg_from_file(cfg, cfg_file):
 
 
 def get_model_from_cfg(cfg):
-    assert cfg["MODEL"]["NAME"] in ("vgg", "vgg_attn", "vgg_attn_proto", "resnet", "resnet_attn"), "Unsupported model name"
+    assert cfg["MODEL"]["NAME"] in ("vgg", "vgg_attn", "vgg_attn_proto", "resnet", "resnet_attn", "detr"), "Unsupported model name"
 
     freeze_epoch = -1
     if cfg["MODEL"]["NAME"] == "vgg":
@@ -180,10 +194,28 @@ def get_model_from_cfg(cfg):
             cfg["MODEL"]["OUT_FEATURES"],
             cfg["MODEL"]["NUM_CLASSES"]
         )
+
+    elif cfg["MODEL"]["NAME"] == "detr":
+        model = build_model(
+            cfg["MODEL"]["OUT_FEATURES"],
+            hidden_dim = cfg["MODEL"]["TRANSFORMERS"]["HIDDEN_DIM"],
+            position_embedding = cfg["MODEL"]["TRANSFORMERS"]["POSITION_EMBEDDING"],
+            train_backbone = cfg["SOLVER"]["TRAIN_BACKBONE"],
+            num_encoder_layers = cfg["MODEL"]["TRANSFORMERS"]["NUM_ENCODER_LAYERS"],
+            num_decoder_layers = cfg["MODEL"]["TRANSFORMERS"]["NUM_DECODER_LAYERS"],
+            return_interm_result = cfg["MODEL"]["TRANSFORMERS"]["INTERMEDIATE_RESULTS"],
+            num_queries = cfg["MODEL"]["TRANSFORMERS"]["NUM_QUERIES"],
+            queries_weight = cfg["MODEL"]["TRANSFORMERS"]["QUERIES_WEIGHT"]
+        )
+
+        classifier = MarginCosineProduct(
+            cfg["MODEL"]["OUT_FEATURES"],
+            cfg["MODEL"]["NUM_CLASSES"]
+        )
     
     # load pretrained backbone if any
     for k in ["VGG", "RESNETS"]:
-        if os.path.exists(cfg["MODEL"][k]["WEIGHTS"]):
+        if os.path.exists(cfg["MODEL"][k]["WEIGHTS"]) and cfg["MODEL"]["NAME"] != "detr":
             print(f"Load pretrained backbone from: {cfg['MODEL'][k]['WEIGHTS']}")
             model.load_state_dict(torch.load(cfg["MODEL"][k]["WEIGHTS"]), strict = False)
 
