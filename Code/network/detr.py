@@ -39,7 +39,7 @@ class DETR(nn.Module):
         
         self.fc = nn.Sequential(
             nn.BatchNorm1d(num_queries * self.hidden_dim),
-            nn.Dropout(p = 0.4),
+            nn.Dropout(p = 0.2),
             nn.Linear(num_queries * self.hidden_dim, out_features),
             nn.BatchNorm1d(out_features)
         )

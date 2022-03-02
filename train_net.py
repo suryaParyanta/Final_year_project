@@ -168,6 +168,7 @@ def train_face_recognition(model, classifier, model_eval, params, train_loaders,
                 loss = calculate_loss(score_dict, label, criterion, other_loss = additional_loss, reg = reg_lambda)
 
                 loss.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), 0.1) # gradient clipping
                 optimizer.step()
 
                 loss_display += loss.detach().item()
