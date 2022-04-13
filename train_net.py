@@ -119,20 +119,51 @@ def train(model, model_eval, params, train_loaders, val_loaders, test_loaders, f
             print("Test dataset not found!")
 
 
-def train_face_recognition(model, classifier, model_eval, params, train_loaders, freeze_epoch:int = -1, device = 'cpu', save_dir = 'results/vgg16_prototype', log_interval = 1000):
+def train_face_recognition(model, model_name, classifier, model_eval, params, train_loaders, clip = False, freeze_epoch:int = -1, device = 'cpu', save_dir = 'results/vgg16_prototype', log_interval = 1000):
     criterion = nn.CrossEntropyLoss()
 
     num_epoch = params["num_epoch"]
     reg_lambda = {
         'lambda2': params["lambda2"]
     }
-
-    optimizer = optim.SGD(
-        list(model.parameters()) + list(classifier.parameters()),
-        lr = params["lr"],
-        weight_decay = params["weight_decay"],
-        momentum = params["momentum"]
-    )
+    
+    model_no_ddp = model.module if isinstance(model, nn.DataParallel) else model
+    if hasattr(model_no_ddp, "backbone"):
+        print("Using AdamW Optimizer")
+        optimizer = optim.AdamW(
+            [
+                {"params": [p for n, p in model_no_ddp.named_parameters() if "backbone" in n and p.requires_grad], 'lr': 1e-5},
+                {"params": [p for n, p in model_no_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
+                {"params": classifier.parameters()}
+            ], lr = params["lr"], weight_decay = params["weight_decay"]
+        )
+    elif hasattr(model_no_ddp, "feature_dict"):
+        # VGG/Resnet + attention
+        print("Using SGD+Momentum Optimizer")
+        if freeze_epoch > 0:
+            optimizer = optim.SGD(
+                [
+                    {"params": [p for n, p in model_no_ddp.named_parameters() if "feature_dict" in n and p.requires_grad], 'lr': 1e-4},
+                    {"params": [p for n, p in model_no_ddp.named_parameters() if "feature_dict" not in n and p.requires_grad], "lr": 1e-5},
+                    {"params": classifier.parameters()}
+                ], lr = params["lr"], weight_decay = params["weight_decay"], momentum = params["momentum"]
+            )
+        else:
+            optimizer = optim.SGD(
+                [
+                    {"params": [p for n, p in model_no_ddp.named_parameters() if "feature_dict" in n and p.requires_grad], 'lr': 1e-4},
+                    {"params": [p for n, p in model_no_ddp.named_parameters() if "feature_dict" not in n and p.requires_grad]},
+                    {"params": classifier.parameters()}
+                ], lr = params["lr"], weight_decay = params["weight_decay"], momentum = params["momentum"]
+            )
+    else:
+        print("Using SGD+Momentum Optimizer")
+        optimizer = optim.SGD(
+            list(model.parameters()) + list(classifier.parameters()),
+            lr = params["lr"],
+            weight_decay = params["weight_decay"],
+            momentum = params["momentum"]
+        )
 
     lr_scheduler = optim.lr_scheduler.StepLR(
         optimizer, 
@@ -151,7 +182,6 @@ def train_face_recognition(model, classifier, model_eval, params, train_loaders,
             model.train()
             classifier.train()
 
-            # unfreeze model parameters for epoch 6 onwards
             if epoch == freeze_epoch + 1:
                 for p in model.parameters():
                     p.requires_grad = True
@@ -162,13 +192,16 @@ def train_face_recognition(model, classifier, model_eval, params, train_loaders,
 
                 data, label = data.to(device = device), label.to(device = device)
                 feature, additional_loss, additional_output = model(data)
-                score = classifier(feature['features'], label)
-                score_dict = {'score': score}
+
+                score = classifier(feature["features"], label)
+                score_dict = {"score": score}
 
                 loss = calculate_loss(score_dict, label, criterion, other_loss = additional_loss, reg = reg_lambda)
-
                 loss.backward()
-                nn.utils.clip_grad_norm_(model.parameters(), 0.1) # gradient clipping
+
+                if clip:
+                    nn.utils.clip_grad_norm_(model.parameters(), 0.1) # gradient clipping
+                    nn.utils.clip_grad_norm_(classifier.parameters(), 0.1)
                 optimizer.step()
 
                 loss_display += loss.detach().item()
@@ -194,7 +227,7 @@ def train_face_recognition(model, classifier, model_eval, params, train_loaders,
                 print("Dataset not found")
             else:
                 for name, root, data_dir, annot in params["VAL"]:
-                    accuracy, th, acc_std = lfw_eval(model_eval, root, data_dir, annot, device = device)
+                    accuracy, th, acc_std = lfw_eval(model_eval, model_name, root, data_dir, annot, device = device)
                     print(f"{name}_acc = {accuracy} %,  std = {acc_std},  threshold = {th}")
             print("")
 
@@ -214,6 +247,11 @@ def train_face_recognition(model, classifier, model_eval, params, train_loaders,
 
 def calculate_loss(score, label, criterion, other_loss = {}, reg = {}):
     logits = score['score']
+
+    if logits.shape[0] != label.shape[0]:
+        num_repeat = logits.shape[0] // label.shape[0]
+        label = label.repeat_interleave(num_repeat)
+
     loss = criterion(logits, label)
 
     if len(other_loss) > 0:
@@ -230,6 +268,7 @@ def calculate_loss(score, label, criterion, other_loss = {}, reg = {}):
 
 def setup(args, cfg, save_dir):
     print(f"Model name: {cfg['MODEL']['NAME']}")
+
     model, classifier, freeze_epoch = get_model_from_cfg(cfg)
     model_eval, *_ = get_model_from_cfg(cfg)
 
@@ -258,16 +297,27 @@ def setup(args, cfg, save_dir):
             save_dir
         )
     else:
+
+        try:
+            model_state_dict = model.module.state_dict()
+        except:
+            model_state_dict = model.state_dict()
+
+        torch.save(model_state_dict, os.path.join(save_dir, 'epoch_0.pt'))
+        torch.save(classifier.state_dict(), os.path.join(save_dir, 'mcp_epoch_0.pt'))
+
         train_face_recognition(
             model,
+            cfg["MODEL"]["NAME"],
             classifier,
             model_eval,
             params,
             train_loader,
+            cfg["SOLVER"]["CLIP_GRAD"],
             freeze_epoch,
             args.device,
             save_dir,
-            log_interval = 1000
+            log_interval = 1
         )
 
 
