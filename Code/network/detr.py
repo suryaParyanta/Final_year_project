@@ -1,8 +1,5 @@
 import os
-# import sys
 
-# sys.path.append(os.path.join(os.getcwd(), '../..'))
-# from Code.dataset_helpers import get_dataset, get_data_loader
 import logging
 logger = logging.getLogger(__name__)
 print = logger.info
@@ -13,7 +10,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# from torchvision import transforms
 
 from Code.network.detr_backbone import build_backbone
 from Code.network.misc import nested_tensor_from_tensor_list
@@ -33,7 +29,6 @@ class DETR(nn.Module):
         
         if os.path.exists(self.queries_weight):
             self.query_embed.weight = self._load_queries_weight()
-            print(self.query_embed.weight)
             self.query_embed.weight.requires_grad = True
 
         self.input_proj = nn.Conv2d(backbone.num_channels, self.hidden_dim, kernel_size = 1)
@@ -69,8 +64,7 @@ class DETR(nn.Module):
 
         print(f"Feature dictionary shape: {feature_dict.shape}")
         
-        return torch.tensor(feature_dict, dtype=torch.float32)
-        # return nn.Parameter(torch.tensor(feature_dict, dtype = torch.float32))
+        return nn.Parameter(torch.tensor(feature_dict, dtype = torch.float32))
 
     def forward(self, x):
         if isinstance(x, (list, torch.Tensor)):
@@ -105,7 +99,6 @@ class DETRLocalFC(nn.Module):
         
         if os.path.exists(self.queries_weight):
             self.query_embed.weight = self._load_queries_weight()
-            print(self.query_embed.weight)
             self.query_embed.weight.requires_grad = True
 
         self.input_proj = nn.Conv2d(backbone.num_channels, self.hidden_dim, kernel_size = 1)
@@ -137,8 +130,7 @@ class DETRLocalFC(nn.Module):
 
         print(f"Feature dictionary shape: {feature_dict.shape}")
         
-        return torch.tensor(feature_dict, dtype=torch.float32)
-        # return nn.Parameter(torch.tensor(feature_dict, dtype = torch.float32))
+        return nn.Parameter(torch.tensor(feature_dict, dtype = torch.float32))
 
     def forward(self, x):
         if isinstance(x, (list, torch.Tensor)):
@@ -196,34 +188,4 @@ def build_model(out_features, global_fc = True, feature_maps = "second",
         model = DETRLocalFC(backbone, transformer, num_queries, out_features, queries_weight)
 
     return model
-
-
-# if __name__ == '__main__':
-#     root = "../../dataset"
-#     annot = "CASIA_aligned_list.txt"
-#     data = "CASIA_aligned"
-
-#     transform = transforms.Compose([
-#         transforms.RandomHorizontalFlip(),
-#         transforms.ToTensor(),
-#         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-#     ])
-
-#     dataset, _ = get_dataset(
-#         root,
-#         data,
-#         annot,
-#         transform,
-#         mode = 'annotation'
-#     )
-
-#     casia_loader = get_data_loader(dataset, batch_size = 8)
-#     model = build_model(512)
-#     model.to('cuda')
-
-#     for data, label in casia_loader:
-#         data, label = data.to('cuda'), label.to('cuda')
-#         features, additinal_loss, additional_output = model(data)
-#         print(features['features'].shape)
-#         model.zero_grad()
         
