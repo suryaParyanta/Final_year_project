@@ -7,6 +7,8 @@ MODEL:
     WEIGHTS: feature_dictionary/CASIA/100000/dictionary_second_64.pickle
     PERCENT_U: 0.2
     PERCENT_L: 0.8
+  SCALING: 30.0
+  MARGIN: 0.4
 DATASETS:
   TRAIN: [casia]
   VAL: [lfw]

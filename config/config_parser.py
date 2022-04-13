@@ -66,6 +66,7 @@ def get_default_cfg():
         "BATCH_SIZE": 64,
         "BASE_LR": 1e-3,
         "TRAIN_BACKBONE": True,
+        "CLIP_GRAD": False,
         "MOMENTUM": 0.9,
         "WEIGHT_DECAY": 5e-4,
         "STEP_SIZE": 5,
@@ -83,6 +84,10 @@ def get_default_cfg():
             "NORM_ATTN": False,
             "USE_THRESH": False,
             "NORM_BEFORE_ATTN": False,
+            "SCALING": 0.0,
+            "MARGIN": 0.0, 
+            "GLOBAL_FC": True,
+            "FEATURE_MAPS": "",
             "RECURRENT_STEP": 0,
             "RESNETS": RESNETS,
             "TRANSFORMERS": TRANSFORMER, 
@@ -151,7 +156,9 @@ def get_model_from_cfg(cfg):
 
         classifier = MarginCosineProduct(
             cfg["MODEL"]["OUT_FEATURES"],
-            cfg["MODEL"]["NUM_CLASSES"]
+            cfg["MODEL"]["NUM_CLASSES"],
+            cfg["MODEL"]["SCALING"],
+            cfg["MODEL"]["MARGIN"]
         )
     
     elif cfg["MODEL"]["NAME"] == "vgg_attn_proto":
@@ -175,7 +182,9 @@ def get_model_from_cfg(cfg):
         model = initialize_LResNet50_IR()
         classifier = MarginCosineProduct(
             cfg["MODEL"]["OUT_FEATURES"],
-            cfg["MODEL"]["NUM_CLASSES"]
+            cfg["MODEL"]["NUM_CLASSES"],
+            cfg["MODEL"]["SCALING"],
+            cfg["MODEL"]["MARGIN"]
         )
     
     elif cfg["MODEL"]["NAME"] == "resnet_attn":
@@ -192,12 +201,16 @@ def get_model_from_cfg(cfg):
 
         classifier = MarginCosineProduct(
             cfg["MODEL"]["OUT_FEATURES"],
-            cfg["MODEL"]["NUM_CLASSES"]
+            cfg["MODEL"]["NUM_CLASSES"],
+            cfg["MODEL"]["SCALING"],
+            cfg["MODEL"]["MARGIN"]
         )
 
     elif cfg["MODEL"]["NAME"] == "detr":
         model = build_model(
             cfg["MODEL"]["OUT_FEATURES"],
+            global_fc = cfg["MODEL"]["GLOBAL_FC"],
+            feature_maps = cfg["MODEL"]["FEATURE_MAPS"],
             hidden_dim = cfg["MODEL"]["TRANSFORMERS"]["HIDDEN_DIM"],
             position_embedding = cfg["MODEL"]["TRANSFORMERS"]["POSITION_EMBEDDING"],
             train_backbone = cfg["SOLVER"]["TRAIN_BACKBONE"],
@@ -211,7 +224,9 @@ def get_model_from_cfg(cfg):
 
         classifier = MarginCosineProduct(
             cfg["MODEL"]["OUT_FEATURES"],
-            cfg["MODEL"]["NUM_CLASSES"]
+            cfg["MODEL"]["NUM_CLASSES"],
+            cfg["MODEL"]["SCALING"],
+            cfg["MODEL"]["MARGIN"]
         )
     
     # load pretrained backbone if any
