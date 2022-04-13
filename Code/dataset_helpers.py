@@ -2,7 +2,7 @@ import os
 from PIL import Image
 
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from torch.utils.data.sampler import Sampler
 from torchvision import transforms
 
@@ -223,6 +223,7 @@ def get_dataset_from_name(name):
         ])
     elif name == "casia":
         transform = transforms.Compose([
+            transforms.Resize((224, 224)),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
@@ -242,10 +243,10 @@ def get_dataset_from_name(name):
         )
 
     elif name == "casia":
-        root = "dataset"
+        root = "dataset/CASIA_Webface"
         annot = "CASIA_aligned_list.txt"
         data = "CASIA_aligned"
-
+        
         dataset, _ = get_dataset(
             root,
             data,
