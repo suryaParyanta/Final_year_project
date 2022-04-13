@@ -21,16 +21,20 @@ from typing import List, Dict
 
 
 class BackboneBase(nn.Module):
-    def __init__(self, backbone: nn.Module, train_backbone: bool, num_channels: int, return_interm_layers: bool):
+    def __init__(self, backbone: nn.Module, train_backbone: bool, feature_maps: str, num_channels: int, return_interm_layers: bool):
         super().__init__()
         for name, parameter in backbone.named_parameters():
             if not train_backbone or 'layer2' not in name and 'layer3' not in name and 'layer4' not in name:
                 parameter.requires_grad_(False)
+
         if return_interm_layers:
             return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
+        elif feature_maps == "second":
+            return_layers = {"layer3": "0"}
         else:
-            return_layers = {'layer3': "0"}
-        self.body = IntermediateLayerGetter(backbone, return_layers=return_layers) # get intermediate values on specified layers
+            return_layers = {"layer4": "0"}
+
+        self.body = IntermediateLayerGetter(backbone, return_layers = return_layers) # get intermediate values on specified layers
         self.num_channels = num_channels
 
     def forward(self, tensor_list: NestedTensor):
@@ -45,12 +49,11 @@ class BackboneBase(nn.Module):
 
 
 class Backbone(BackboneBase):
-    """ResNet backbone with frozen BatchNorm."""
-    def __init__(self, name: str, train_backbone: bool, return_interm_layers: bool, layers: list = [3, 4, 14, 3], filter_list: list = [64, 64, 128, 256, 512], weight = ""):
+    def __init__(self, name: str, train_backbone: bool, feature_maps: str, return_interm_layers: bool, layers: list = [3, 4, 14, 3], filter_list: list = [64, 64, 128, 256, 512], weight = ""):
         if name == "resnet50_ir":
             backbone = LResNet(IR_Block, layers = layers, filter_list = filter_list)
         else:
-            pass
+            raise Exception(f"Backbone name {name} is not identified!")
 
         if os.path.exists(weight):
             print(f"Load pretrained backbone from {weight}")
@@ -58,8 +61,8 @@ class Backbone(BackboneBase):
         else:
             print("Backbone pretrained weight not found!")
         
-        num_channels = 256 # change to 512 if use last layer
-        super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
+        num_channels = 256 if feature_maps == "second" else 512
+        super().__init__(backbone, train_backbone, feature_maps, num_channels, return_interm_layers)
 
 
 class Joiner(nn.Sequential):
@@ -78,9 +81,16 @@ class Joiner(nn.Sequential):
         return out, pos
 
 
-def build_backbone(layers: list = [3, 4, 14, 3], filter_list: list = [64, 64, 128, 256, 512], backbone_weight = "", hidden_dim = 256, position_embedding = 'sine', train_backbone = False):
+def build_backbone(layers: list = [3, 4, 14, 3], filter_list: list = [64, 64, 128, 256, 512], 
+                   backbone_weight = "", 
+                   hidden_dim = 256, position_embedding = 'sine', train_backbone = False, feature_maps = "second"):
+
     position_embedding = build_position_encoding(hidden_dim, position_embedding)
-    backbone = Backbone("resnet50_ir", train_backbone, return_interm_layers = False, layers = layers, filter_list = filter_list, weight = backbone_weight)
+
+    backbone = Backbone("resnet50_ir", train_backbone, feature_maps, 
+                        return_interm_layers = False, 
+                        layers = layers, filter_list = filter_list, weight = backbone_weight)
+
     model = Joiner(backbone, position_embedding)
     model.num_channels = backbone.num_channels
 

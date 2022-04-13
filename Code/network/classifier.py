@@ -28,7 +28,7 @@ class MarginCosineProduct(nn.Module):
     (since face dataset has too many classes) and compute large margin cosine distance for each classes.
     """
 
-    def __init__(self, in_features:int, out_features:int, s:float = 30.0, m:float = 0.40):
+    def __init__(self, in_features:int, out_features:int, s:float = 30.0, m:float = 0.4):
         """
         MCP layer initialization.
 
@@ -61,6 +61,11 @@ class MarginCosineProduct(nn.Module):
         :returns: Tensor of output with shape (batch_size, num_classes)
         :rtype:   torch.FloatTensor 
         """
+        if len(x.shape) == 3:
+            num_repeat, feature_dim = x.shape[1:]
+            x = x.reshape(-1, feature_dim)
+            label = label.repeat_interleave(num_repeat)
+
         cosine = cosine_sim(x, self.weight)
         one_hot = torch.zeros_like(cosine)
         one_hot.scatter(1, label.reshape(-1,1), 1.0)
