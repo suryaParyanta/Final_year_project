@@ -9,14 +9,14 @@ def parse_argument():
     parser.add_argument(
         '--root',
         help = 'Path to the dataset',
-        default = '../../dataset/CASIA_aligned',
+        default = 'dataset/CASIA_Webface/CASIA_aligned',
         type = str
     )
 
     parser.add_argument(
         '--save_dir',
         help = 'Save directory',
-        default = '../../dataset/CASIA_aligned_list.txt'
+        default = 'dataset/CASIA_Webface/CASIA_aligned_list.txt'
     )
 
     return parser.parse_args()

@@ -14,28 +14,28 @@ def parse_argument():
     parser.add_argument(
         '--root',
         help = 'Path to the dataset',
-        default = '../dataset/CASIA_maxpy_clean',
+        default = 'dataset/CASIA_Webface/CASIA_maxpy_clean',
         type = str
     )
 
     parser.add_argument(
         '--annot_path',
         help = 'Path to the annotation file',
-        default = '../dataset/CASIA_clean_list.txt',
+        default = 'dataset/CASIA_Webface/CASIA_clean_list.txt',
         type = str
     )
 
     parser.add_argument(
         '--save_dir',
         help = 'Path to the save directory',
-        default = '../dataset/CASIA_aligned',
+        default = 'dataset/CASIA_Webface/CASIA_aligned_2',
         type = str
     )
 
     parser.add_argument(
         '--batch_size',
         help = 'Batch size for MTCNN model',
-        default = 1024,
+        default = 2048,
         type = int
     )
 
@@ -103,10 +103,9 @@ def align_face(model, root, img_list, save_dir, batch_size = 128, pairs = False)
         else:
             batch_data = [i for i, _ in img_data[idx_start:idx_end]]
     
-        # Resize the image into 224, 224
         resize_transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize((224,224)),
+            transforms.Resize((256,256)),
             transforms.ToPILImage()
         ])
         batch_img = [resize_transform(Image.open(os.path.join(root, img_path)).convert('RGB')) for img_path in batch_data]
