@@ -118,7 +118,7 @@ def extract_feature(img, model, device:str = 'cpu'):
     return features
 
 
-def extract_mask_features(model, mask_extractor, ori_img, mask_img, device = 'cpu'):
+def extract_mask_features(model, mask_extractor, ori_img, mask_img, device = 'cpu', attention_maps = False):
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -151,16 +151,27 @@ def extract_mask_features(model, mask_extractor, ori_img, mask_img, device = 'cp
 
             logging.disable(logging.NOTSET)
 
+        interm_mask_attn = mask_attn.clone().detach()
         # now feed no-masked image
-        temp, *_ = model.recurrence_forward(ori_img)
+        temp, _, additional_output_ori = model.recurrence_forward(ori_img)
+        interm_ori_attn = additional_output_ori["attn_map"][-1].clone().detach()
         no_mask_feature = model.filter_forward(temp, mask_attn)
+        
 
         temp_f, *_ = model.recurrence_forward(ori_img_f)
         no_mask_feature_f = model.filter_forward(temp_f, mask_attn_f)
 
         no_mask_features = torch.cat([no_mask_feature["features"], no_mask_feature_f["features"]], 1)[0].to('cpu')
-        
-    return no_mask_features, mask_features
+
+    if not attention_maps:
+        return no_mask_features, mask_features
+    else:
+        interm_attention_maps = {
+            "ori": interm_ori_attn,
+            "mask": interm_mask_attn
+        }
+
+        return no_mask_features, mask_features, interm_attention_maps
 
 
 def get_best_threshold(thresholds, distance_pred):
@@ -233,16 +244,16 @@ def lfw_eval(model, model_name, root, image_dir, pairs_filelist, device = 'cpu',
     model.eval()
 
     mask_protocol = False
-    if "resnet" in model_name and "masked" in pairs_filelist:
+    if model_name in ["resnet", "resnet_attn", "vgg_attn"] and "masked" in pairs_filelist:
         mask_protocol = True
 
         logging.disable(logging.INFO)
-        mask_extractor_config = "pretrained_weight/LResNet50IR_Attn_100000_64_Second_CASIA/config.yaml"
-        mask_extractor_weight = "pretrained_weight/LResNet50IR_Attn_100000_64_Second_CASIA/last.pt"
+        mask_extractor_config = "pretrained_weight/LResNet50IR_Attn_100000_64_second_CASIA/config.yaml"
+        mask_extractor_weight = "pretrained_weight/LResNet50IR_Attn_100000_64_second_CASIA/last.pt"
 
-        extractpr_cfg = get_default_cfg()
-        extractpr_cfg = merge_cfg_from_file(extractpr_cfg, mask_extractor_config)
-        mask_extractor, *_ = get_model_from_cfg(extractpr_cfg)
+        extractor_cfg = get_default_cfg()
+        extractor_cfg = merge_cfg_from_file(extractor_cfg, mask_extractor_config)
+        mask_extractor, *_ = get_model_from_cfg(extractor_cfg)
         mask_extractor.load_state_dict(torch.load(mask_extractor_weight))
 
         for p in mask_extractor.parameters():
@@ -322,6 +333,7 @@ def setup_eval(args, cfg):
     model, *_ = get_model_from_cfg(cfg)
 
     if os.path.exists(args.weight):
+        print(f"Load model weight from: {args.weight}")
         model.load_state_dict(torch.load(args.weight))
 
     num_images, *_, test_loaders = get_dataloader_from_cfg(cfg)
