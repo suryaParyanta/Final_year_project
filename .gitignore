@@ -3,6 +3,7 @@ results/
 tf_code/
 pretrained_weight/
 notebooks/.ipynb_checkpoints/
+notebooks/AR_Face_Database.ipynb
 
 __pycache__/
 */__pycache__/
