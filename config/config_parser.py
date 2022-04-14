@@ -1,7 +1,9 @@
+import code
 import os
 import yaml
 from pathlib import Path
 import sys
+
 sys.path.append(os.getcwd())
 
 import logging
@@ -11,11 +13,11 @@ print = logger.info
 
 import torch
 
-from code.dataset_helpers import get_dataset_from_name, get_data_loader
-from code.network.vgg_backbone import initialize_vgg, initialize_vgg_attn, initialize_vgg_attn_prototype
-from code.network.resnet_backbone import initialize_LResNet50_IR, initialize_LResNet50_attn
-from code.network.detr import build_model
-from code.network.classifier import MarginCosineProduct
+from Code.dataset_helpers import get_dataset_from_name, get_data_loader
+from Code.network.vgg_backbone import initialize_vgg, initialize_vgg_attn, initialize_vgg_attn_prototype
+from Code.network.resnet_backbone import initialize_LResNet50_IR, initialize_LResNet50_attn
+from Code.network.detr import build_model
+from Code.network.classifier import MarginCosineProduct
 
 
 def get_default_cfg():
