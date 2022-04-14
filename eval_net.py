@@ -154,7 +154,7 @@ def extract_mask_features(model, mask_extractor, ori_img, mask_img, device = 'cp
         interm_mask_attn = mask_attn.clone().detach()
         # now feed no-masked image
         temp, _, additional_output_ori = model.recurrence_forward(ori_img)
-        interm_ori_attn = additional_output_ori["attn_map"][-1].clone().detach()
+        interm_ori_attn = None if additional_output_ori["attn_map"][-1] is None else additional_output_ori["attn_map"][-1].clone().detach()
         no_mask_feature = model.filter_forward(temp, mask_attn)
         
 
