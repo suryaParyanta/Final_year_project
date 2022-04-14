@@ -334,7 +334,7 @@ class VGG_Attention_Prototype(VGG_16):
         import gc
         sys.path.append(os.getcwd())
         from sklearn.cluster import KMeans
-        from code.dataset_helpers import get_dataset, get_data_loader, DatasetSampler
+        from Code.dataset_helpers import get_dataset, get_data_loader, DatasetSampler
 
         batch_size = 128;
         proto_weight = np.ndarray((self.num_classes, self.num_prototype, 512, 7, 7)).astype(np.float32)

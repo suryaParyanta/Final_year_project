@@ -6,9 +6,9 @@ print = logger.info
 # import sys
 # sys.path.append(os.path.join(os.getcwd(), '../..'))
 
-from code.network.resnet_backbone import LResNet, IR_Block
-from code.network.misc import NestedTensor, nested_tensor_from_tensor_list
-from code.network.position_encoding import build_position_encoding
+from Code.network.resnet_backbone import LResNet, IR_Block
+from Code.network.misc import NestedTensor, nested_tensor_from_tensor_list
+from Code.network.position_encoding import build_position_encoding
 # from Code.dataset_helpers import get_data_loader, get_dataset
 
 import torch

@@ -11,9 +11,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from code.network.detr_backbone import build_backbone
-from code.network.misc import nested_tensor_from_tensor_list
-from code.network.transformer import build_transformer
+from Code.network.detr_backbone import build_backbone
+from Code.network.misc import nested_tensor_from_tensor_list
+from Code.network.transformer import build_transformer
 
 
 class DETR(nn.Module):

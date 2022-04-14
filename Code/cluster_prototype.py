@@ -10,8 +10,8 @@ from sklearn.cluster import KMeans
 import torch
 from torchvision import transforms
 
-from code.dataset_helpers import get_dataset, get_data_loader, DatasetSampler
-from code.network.vgg_backbone import initialize_vgg, Identity
+from Code.dataset_helpers import get_dataset, get_data_loader, DatasetSampler
+from Code.network.vgg_backbone import initialize_vgg, Identity
 
 
 def parse_argument():
