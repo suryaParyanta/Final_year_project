@@ -50,6 +50,18 @@ python eval_net.py --config_file PATH_TO_CONFIG_FILE --weight PATH_TO_MODEL_WEIG
 
 # Visualization
 
+## 1. Occluded MNIST dataset
+
+<p align="center">
+  <img src="https://github.com/suryaParyanta/Final_year_project/blob/master/visualization/MNIST_Natural_1/mnist_occ_natural_1_good.jpg" class="center"        alt="MNIST dataset" width="500"/>
+ </p>
+
+## 2. Occluded LFW dataset
+
+<p align="center">
+  <img src="https://github.com/suryaParyanta/Final_year_project/blob/master/visualization/DETR_decoder_only_best/single_pair_Masked-LFW.jpg" class="center"        alt="LFW dataset" width="500"/>
+ </p>
+ 
 # References
 
 * DETR github repo: https://github.com/facebookresearch/detr
