@@ -47,3 +47,17 @@ To run face verification evaluation, run the following command:
 ```bash
 python eval_net.py --config_file PATH_TO_CONFIG_FILE --weight PATH_TO_MODEL_WEIGHT
 ```
+
+# Visualization
+
+# References
+
+* DETR github repo: https://github.com/facebookresearch/detr
+* Mask generator repo: https://github.com/aqeelanwar/MaskTheFace
+* vMF clustering repo: https://github.com/AdamKortylewski/CompositionalNets
+* CosFace repo: https://github.com/MuggleWang/CosFace_pytorch
+* N. Carion, F. Massa, G. Synnaeve, N. Usunier, A. Kirillov, and S. Zagoruyko, *End-to-end object detection with transformers*, European conference on       computer vision, 2020: Springer, pp. 213-229. [PDF](https://arxiv.org/pdf/2005.12872.pdf)
+* M. Xiao, A. Kortylewski, R. Wu, S. Qiao, W. Shen, and A. Yuille, *Tdmpnet:
+  Prototype network with recurrent top-down modulation for robust object classification
+  under partial occlusion*, European Conference on Computer Vision, 2020:
+  Springer, pp. 447-463. [PDF](https://arxiv.org/pdf/1909.03879.pdf)
