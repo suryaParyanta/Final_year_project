@@ -29,16 +29,21 @@ cd Final_year_project
 pip install -r requirements.txt
 ```
 
+# Project Directories
+
+* `Code/` folder contains the implementation of models, dataset, dataloader, and prototype generation (the output is stored on `prototype_weight/` folder).
+* `config/` folder contains model configuration files used for training and evaluation.
+* `feature_dictionary/` folder contains feature dictionary weight obtained from vMF clustering.
+* `notebooks/` folder contains visualization of models (the output is stored on `visualization/` folder).
+
 # Getting Started
 
-To train the model with one or more gpu, run the following command:
+To train the model with one or more gpu, run the following command (Note: if you want to run on CPU, set `--device cuda`):
 ```bash
-python train_net.py --config_file PATH_TO_CONFIG_FILE --device_ids GPU_IDS --device cuda
+python train_net.py --config_file PATH_TO_CONFIG_FILE --device_ids GPU_IDS
 ```
 
-To train the model with CPU, run the following command:
+To run face verification evaluation, run the following command:
 ```bash
-python train_net.py --config_file PATH_TO_CONFIG_FILE --device cpu
+python eval_net.py --config_file PATH_TO_CONFIG_FILE --weight PATH_TO_MODEL_WEIGHT
 ```
-
-
